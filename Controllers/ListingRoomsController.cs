@@ -79,22 +79,36 @@ public class ListingRoomsController : ControllerBase
         return Ok(result);
     }
 
-    // Features (junction)
+    // Features (predefined)
+    [HttpGet("{roomId}/features")]
+    public async Task<IActionResult> GetFeatures(int listingId, int roomId)
+    {
+        var result = await _roomService.GetRoomFeaturesAsync(listingId, roomId);
+        return Ok(result);
+    }
+
     [HttpPost("{roomId}/features")]
     public async Task<IActionResult> LinkFeature(int listingId, int roomId, [FromBody] LinkFeatureRequest request)
     {
         var result = await _roomService.LinkFeatureAsync(listingId, roomId, request.FeatureId);
-        return Ok(result);
+        return StatusCode(201, result);
     }
 
     [HttpDelete("{roomId}/features/{featureId}")]
     public async Task<IActionResult> UnlinkFeature(int listingId, int roomId, int featureId)
     {
-        var result = await _roomService.UnlinkFeatureAsync(listingId, roomId, featureId);
-        return Ok(result);
+        await _roomService.UnlinkFeatureAsync(listingId, roomId, featureId);
+        return NoContent();
     }
 
     // Custom Features
+    [HttpGet("{roomId}/custom-features")]
+    public async Task<IActionResult> GetCustomFeatures(int listingId, int roomId)
+    {
+        var result = await _roomService.GetRoomCustomFeaturesAsync(listingId, roomId);
+        return Ok(result);
+    }
+
     [HttpPost("{roomId}/custom-features")]
     public async Task<IActionResult> AddCustomFeature(int listingId, int roomId, [FromBody] AddCustomFeatureRequest request)
     {

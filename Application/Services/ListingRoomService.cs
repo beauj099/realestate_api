@@ -185,6 +185,24 @@ public class ListingRoomService
         return new RoomConditionDto(result.Id, result.ListingRoomId, result.ConditionRating, result.Notes, result.ConditionCategoryId);
     }
 
+    public async Task<IEnumerable<FeatureDto>> GetRoomFeaturesAsync(int listingId, int roomId)
+    {
+        var listing = await _listingRepo.GetByIdAsync(listingId);
+        if (listing == null) throw new KeyNotFoundException($"Listing {listingId} not found");
+
+        var features = await _roomRepo.GetLinkedFeaturesAsync(roomId);
+        return features.Select(f => new FeatureDto(f.Id, f.Category, f.Description));
+    }
+
+    public async Task<IEnumerable<CustomFeatureDto>> GetRoomCustomFeaturesAsync(int listingId, int roomId)
+    {
+        var listing = await _listingRepo.GetByIdAsync(listingId);
+        if (listing == null) throw new KeyNotFoundException($"Listing {listingId} not found");
+
+        var features = await _roomRepo.GetCustomFeaturesAsync(roomId);
+        return features.Select(f => new CustomFeatureDto(f.Id, f.ListingRoomId, f.Description));
+    }
+
     public async Task<IEnumerable<FeatureDto>> LinkFeatureAsync(int listingId, int roomId, int featureId)
     {
         var listing = await _listingRepo.GetByIdAsync(listingId);
