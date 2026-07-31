@@ -4,7 +4,7 @@ CREATE TABLE [dbo].[ListingParking] (
     [ParkingTypeId] INT NULL,
     [Quantity]      INT NULL,
     CONSTRAINT [PK_ListingParking] PRIMARY KEY CLUSTERED ([Id] ASC),
-    CONSTRAINT [FK_ListingParking_Listing] FOREIGN KEY ([ListingId]) REFERENCES [dbo].[Listing] ([Id]),
+    CONSTRAINT [FK_ListingParking_Listing] FOREIGN KEY ([ListingId]) REFERENCES [dbo].[Listings] ([Id]),
     CONSTRAINT [FK_ListingParking_ParkingType] FOREIGN KEY ([ParkingTypeId]) REFERENCES [dbo].[ParkingType] ([Id])
 );
 

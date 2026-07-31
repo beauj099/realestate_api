@@ -14,7 +14,7 @@ CREATE TABLE [dbo].[ListingAddress] (
     [Latitude]         DECIMAL (9, 6) NULL,
     [Longitude]        DECIMAL (9, 6) NULL,
     CONSTRAINT [PK__ListingA__ED73BF7A8659A885] PRIMARY KEY CLUSTERED ([ListingAddressId] ASC),
-    CONSTRAINT [FK__ListingAd__Listi__7226EDCC] FOREIGN KEY ([ListingId]) REFERENCES [dbo].[Listing] ([Id]) ON DELETE CASCADE,
+    CONSTRAINT [FK__ListingAd__Listi__7226EDCC] FOREIGN KEY ([ListingId]) REFERENCES [dbo].[Listings] ([Id]) ON DELETE CASCADE,
     CONSTRAINT [UQ_ListingAddress_ListingId] UNIQUE NONCLUSTERED ([ListingId] ASC)
 );
 

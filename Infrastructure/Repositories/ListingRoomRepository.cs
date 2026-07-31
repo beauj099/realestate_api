@@ -61,8 +61,19 @@ public class ListingRoomRepository
     public async Task DeleteAsync(int id)
     {
         using var connection = _connectionFactory.CreateConnection();
+        connection.Open();
+        using var transaction = connection.BeginTransaction();
+
         await connection.ExecuteAsync(
-            "DELETE FROM ListingRoom WHERE Id = @Id", new { Id = id });
+            "DELETE FROM Condition WHERE ListingRoomId = @Id", new { Id = id }, transaction);
+        await connection.ExecuteAsync(
+            "DELETE FROM ListingRoomFeature WHERE ListingRoomId = @Id", new { Id = id }, transaction);
+        await connection.ExecuteAsync(
+            "DELETE FROM ListingRoomCustomFeature WHERE ListingRoomId = @Id", new { Id = id }, transaction);
+        await connection.ExecuteAsync(
+            "DELETE FROM ListingRoom WHERE Id = @Id", new { Id = id }, transaction);
+
+        transaction.Commit();
     }
 
     public async Task<Condition?> GetConditionByRoomIdAsync(int listingRoomId)

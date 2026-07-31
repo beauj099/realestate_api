@@ -57,8 +57,43 @@ public class ListingRepository
     public async Task DeleteAsync(int id)
     {
         using var connection = _connectionFactory.CreateConnection();
+        var listing = await connection.QueryFirstOrDefaultAsync<Listing>(
+            "SELECT Id, ReferenceNumber, P24Ref, PropertyTypeId, ListingValuationId, ListDate, Status, CreatedAt, UpdatedAt FROM Listings WHERE Id = @Id",
+            new { Id = id });
+        if (listing is null) return;
+
+        connection.Open();
+        using var transaction = connection.BeginTransaction();
+
         await connection.ExecuteAsync(
-            "DELETE FROM Listings WHERE Id = @Id", new { Id = id });
+            "DELETE FROM ListingOutdoorFeature WHERE ListingId = @Id", new { Id = id }, transaction);
+        await connection.ExecuteAsync(
+            "DELETE FROM Contact WHERE ListingId = @Id", new { Id = id }, transaction);
+        await connection.ExecuteAsync(
+            "DELETE FROM ListingParking WHERE ListingId = @Id", new { Id = id }, transaction);
+        await connection.ExecuteAsync(
+            "DELETE FROM PropertyRunningCosts WHERE ListingId = @Id", new { Id = id }, transaction);
+        await connection.ExecuteAsync(
+            "DELETE FROM ListingRoomFeature WHERE ListingRoomId IN (SELECT Id FROM ListingRoom WHERE ListingId = @Id)", new { Id = id }, transaction);
+        await connection.ExecuteAsync(
+            "DELETE FROM ListingRoomCustomFeature WHERE ListingRoomId IN (SELECT Id FROM ListingRoom WHERE ListingId = @Id)", new { Id = id }, transaction);
+        await connection.ExecuteAsync(
+            "DELETE FROM Condition WHERE ListingRoomId IN (SELECT Id FROM ListingRoom WHERE ListingId = @Id)", new { Id = id }, transaction);
+        await connection.ExecuteAsync(
+            "DELETE FROM ListingRoom WHERE ListingId = @Id", new { Id = id }, transaction);
+        await connection.ExecuteAsync(
+            "DELETE FROM ListingAddress WHERE ListingId = @Id", new { Id = id }, transaction);
+        await connection.ExecuteAsync(
+            "DELETE FROM ListingBuildingInfo WHERE ListingId = @Id", new { Id = id }, transaction);
+        if (listing.ListingValuationId is not null)
+        {
+            await connection.ExecuteAsync(
+                "DELETE FROM ListingValuation WHERE Id = @Id", new { Id = listing.ListingValuationId }, transaction);
+        }
+        await connection.ExecuteAsync(
+            "DELETE FROM Listings WHERE Id = @Id", new { Id = id }, transaction);
+
+        transaction.Commit();
     }
 
     public async Task<Listing?> SubmitAsync(int id)
