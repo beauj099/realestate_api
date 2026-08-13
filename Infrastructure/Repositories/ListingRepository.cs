@@ -40,7 +40,7 @@ public class ListingRepository
             "DECLARE @RefNum NVARCHAR(20) = 'LST-' + @Year + '-' + RIGHT('00000' + CAST(@NextNum AS NVARCHAR(5)), 5); " +
             "INSERT INTO Listings (ReferenceNumber, P24Ref, PropertyTypeId, Status, CreatedAt, UpdatedAt) " +
             "OUTPUT INSERTED.Id, INSERTED.ReferenceNumber, INSERTED.P24Ref, INSERTED.PropertyTypeId, INSERTED.ListingValuationId, INSERTED.ListDate, INSERTED.Status, INSERTED.CreatedAt, INSERTED.UpdatedAt " +
-            "VALUES (@RefNum, @P24Ref, @PropertyTypeId, 'draft', GETUTCDATE(), GETUTCDATE())",
+            "VALUES (@RefNum, @P24Ref, @PropertyTypeId, 'incomplete', GETUTCDATE(), GETUTCDATE())",
             new { PropertyTypeId = propertyTypeId, P24Ref = p24Ref });
     }
 
@@ -102,7 +102,7 @@ public class ListingRepository
         return await connection.QueryFirstOrDefaultAsync<Listing>(
             "UPDATE Listings SET Status = 'submitted', ListDate = GETUTCDATE(), UpdatedAt = GETUTCDATE() " +
             "OUTPUT INSERTED.Id, INSERTED.ReferenceNumber, INSERTED.P24Ref, INSERTED.PropertyTypeId, INSERTED.ListingValuationId, INSERTED.ListDate, INSERTED.Status, INSERTED.CreatedAt, INSERTED.UpdatedAt " +
-            "WHERE Id = @Id AND Status = 'draft'",
+            "WHERE Id = @Id AND Status = 'incomplete'",
             new { Id = id });
     }
 }

@@ -2,7 +2,7 @@
 -- Listing CRUD Stored Procedures
 -- ============================================
 
--- Create listing (draft status, auto-generate ReferenceNumber)
+-- Create listing (incomplete status, auto-generate ReferenceNumber)
 CREATE   PROCEDURE sp_Listings_Create
     @PropertyTypeId INT,
     @P24Ref NVARCHAR(50) = NULL
@@ -23,7 +23,7 @@ BEGIN
     SET @RefNum = 'LST-' + @Year + '-' + RIGHT('00000' + CAST(@NextNum AS NVARCHAR(5)), 5);
 
     INSERT INTO Listings (ReferenceNumber, P24Ref, PropertyTypeId, Status, CreatedAt, UpdatedAt)
-    VALUES (@RefNum, @P24Ref, @PropertyTypeId, 'draft', GETUTCDATE(), GETUTCDATE());
+    VALUES (@RefNum, @P24Ref, @PropertyTypeId, 'incomplete', GETUTCDATE(), GETUTCDATE());
 
     SET @Id = SCOPE_IDENTITY();
 

@@ -8,7 +8,7 @@ public class Listing
     public int PropertyTypeId { get; set; }
     public int? ListingValuationId { get; set; }
     public DateTime? ListDate { get; set; }
-    public string Status { get; set; } = "draft";
+    public string Status { get; set; } = "incomplete";
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }

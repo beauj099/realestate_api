@@ -1,5 +1,5 @@
 
--- Submit listing (draft -> submitted)
+-- Submit listing (incomplete -> submitted)
 CREATE   PROCEDURE sp_Listings_Submit
     @Id INT
 AS
@@ -9,7 +9,7 @@ BEGIN
     SET Status = 'submitted',
         ListDate = GETUTCDATE(),
         UpdatedAt = GETUTCDATE()
-    WHERE Id = @Id AND Status = 'draft';
+    WHERE Id = @Id AND Status = 'incomplete';
 
     SELECT Id, ReferenceNumber, P24Ref, PropertyTypeId, ListingValuationId, ListDate, Status, CreatedAt, UpdatedAt
     FROM Listings

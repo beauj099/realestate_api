@@ -9,7 +9,7 @@ CREATE TABLE [dbo].[Listings] (
     [CreatedAt]          DATETIME2 (7)  CONSTRAINT [DF__Listings__Created] DEFAULT (getutcdate()) NOT NULL,
     [UpdatedAt]          DATETIME2 (7)  CONSTRAINT [DF__Listings__Updated] DEFAULT (getutcdate()) NOT NULL,
     CONSTRAINT [PK__Listings] PRIMARY KEY CLUSTERED ([Id] ASC),
-    CONSTRAINT [CK__Listings__Status] CHECK ([Status] IN ('Active', 'Expired', 'Withdrawn', 'Let', 'Sold', 'draft', 'submitted')),
+    CONSTRAINT [CK__Listings__Status] CHECK ([Status] IN ('Active', 'Expired', 'Withdrawn', 'Let', 'Sold', 'incomplete', 'submitted')),
     CONSTRAINT [FK_Listings_ListingValuation] FOREIGN KEY ([ListingValuationId]) REFERENCES [dbo].[ListingValuation] ([Id]),
     CONSTRAINT [FK_Listings_PropertyType] FOREIGN KEY ([PropertyTypeId]) REFERENCES [dbo].[PropertyType] ([Id])
 );
