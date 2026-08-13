@@ -1,3 +1,4 @@
+using AutoMapper;
 using RealEstateApi.Application.DTOs;
 using RealEstateApi.Domain.Models;
 using RealEstateApi.Infrastructure.Repositories;
@@ -8,11 +9,13 @@ public class ListingOutdoorFeatureService
 {
     private readonly ListingRepository _listingRepo;
     private readonly ListingOutdoorFeatureRepository _outdoorFeatureRepo;
+    private readonly IMapper _mapper;
 
-    public ListingOutdoorFeatureService(ListingRepository listingRepo, ListingOutdoorFeatureRepository outdoorFeatureRepo)
+    public ListingOutdoorFeatureService(ListingRepository listingRepo, ListingOutdoorFeatureRepository outdoorFeatureRepo, IMapper mapper)
     {
         _listingRepo = listingRepo;
         _outdoorFeatureRepo = outdoorFeatureRepo;
+        _mapper = mapper;
     }
 
     public async Task<IEnumerable<OutdoorFeatureDto>> GetByListingIdAsync(int listingId)
@@ -21,7 +24,7 @@ public class ListingOutdoorFeatureService
         if (listing == null) throw new KeyNotFoundException($"Listing {listingId} not found");
 
         var features = await _outdoorFeatureRepo.GetByListingIdAsync(listingId);
-        return features.Select(f => new OutdoorFeatureDto(f.Id, f.ListingId, f.Description));
+        return _mapper.Map<List<OutdoorFeatureDto>>(features);
     }
 
     public async Task<OutdoorFeatureDto> AddAsync(int listingId, AddOutdoorFeatureRequest request)
@@ -29,14 +32,11 @@ public class ListingOutdoorFeatureService
         var listing = await _listingRepo.GetByIdAsync(listingId);
         if (listing == null) throw new KeyNotFoundException($"Listing {listingId} not found");
 
-        var feature = new ListingOutdoorFeature
-        {
-            ListingId = listingId,
-            Description = request.Description
-        };
+        var feature = _mapper.Map<ListingOutdoorFeature>(request);
+        feature.ListingId = listingId;
 
         var result = await _outdoorFeatureRepo.AddAsync(feature);
-        return new OutdoorFeatureDto(result.Id, result.ListingId, result.Description);
+        return _mapper.Map<OutdoorFeatureDto>(result);
     }
 
     public async Task DeleteAsync(int listingId, int id)
@@ -53,6 +53,6 @@ public class ListingOutdoorFeatureService
         if (listing == null) throw new KeyNotFoundException($"Listing {listingId} not found");
 
         var result = await _outdoorFeatureRepo.ReplaceAllAsync(listingId, request.Descriptions);
-        return result.Select(f => new OutdoorFeatureDto(f.Id, f.ListingId, f.Description));
+        return _mapper.Map<List<OutdoorFeatureDto>>(result);
     }
 }
