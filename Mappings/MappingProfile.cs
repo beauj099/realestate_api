@@ -9,54 +9,54 @@ public class MappingProfile : Profile
     public MappingProfile()
     {
         // Lookup entities -> DTOs
-        CreateMap<PropertyType, PropertyTypeDto>();
-        CreateMap<RoomType, RoomTypeDto>();
-        CreateMap<Feature, FeatureDto>();
-        CreateMap<ConditionCategory, ConditionCategoryDto>();
-        CreateMap<ParkingType, ParkingTypeDto>();
-        CreateMap<Facing, FacingDto>();
-        CreateMap<Zoning, ZoningDto>();
+        CreateMap<PropertyType, PropertyTypeDto>().ReverseMap();
+        CreateMap<RoomType, RoomTypeDto>().ReverseMap();
+        CreateMap<Feature, FeatureDto>().ReverseMap();
+        CreateMap<ConditionCategory, ConditionCategoryDto>().ReverseMap();
+        CreateMap<ParkingType, ParkingTypeDto>().ReverseMap();
+        CreateMap<Facing, FacingDto>().ReverseMap();
+        CreateMap<Zoning, ZoningDto>().ReverseMap();
 
         // Listing entities -> DTOs
-        CreateMap<Listing, ListingSummaryDto>();
+        CreateMap<Listing, ListingSummaryDto>().ReverseMap();
 
-        CreateMap<ListingAddress, ListingAddressDto>();
+        CreateMap<ListingAddress, ListingAddressDto>().ReverseMap();
 
-        CreateMap<ListingBuildingInfo, BuildingInfoDto>();
+        CreateMap<ListingBuildingInfo, BuildingInfoDto>().ReverseMap();
 
-        CreateMap<ListingValuation, ValuationDto>();
+        CreateMap<ListingValuation, ValuationDto>().ReverseMap();
 
-        CreateMap<PropertyRunningCosts, RunningCostsDto>();
+        CreateMap<PropertyRunningCosts, RunningCostsDto>().ReverseMap();
 
         CreateMap<ListingParking, ParkingDto>()
             .ForMember(dest => dest.ParkingTypeDescription,
                 opt => opt.MapFrom(src => src.ParkingTypeDescription ?? ""));
 
-        CreateMap<Condition, RoomConditionDto>();
+        CreateMap<Condition, RoomConditionDto>().ReverseMap();
 
-        CreateMap<ListingRoomCustomFeature, CustomFeatureDto>();
+        CreateMap<ListingRoomCustomFeature, CustomFeatureDto>().ReverseMap();
 
-        CreateMap<ListingOutdoorFeature, OutdoorFeatureDto>();
+        CreateMap<ListingOutdoorFeature, OutdoorFeatureDto>().ReverseMap();
 
-        CreateMap<Contact, ContactDto>();
+        CreateMap<Contact, ContactDto>().ReverseMap();
 
         // Request -> Entity mappings (inbound)
-        CreateMap<UpsertAddressRequest, ListingAddress>();
-        CreateMap<UpsertBuildingInfoRequest, ListingBuildingInfo>();
-        CreateMap<UpsertValuationRequest, ListingValuation>();
-        CreateMap<UpsertRunningCostsRequest, PropertyRunningCosts>();
-        CreateMap<CreateRoomRequest, ListingRoom>();
-        CreateMap<UpsertRoomConditionRequest, Condition>();
-        CreateMap<AddCustomFeatureRequest, ListingRoomCustomFeature>();
-        CreateMap<AddParkingRequest, ListingParking>();
-        CreateMap<AddOutdoorFeatureRequest, ListingOutdoorFeature>();
+        CreateMap<UpsertAddressRequest, ListingAddress>().ReverseMap();
+        CreateMap<UpsertBuildingInfoRequest, ListingBuildingInfo>().ReverseMap();
+        CreateMap<UpsertValuationRequest, ListingValuation>().ReverseMap();
+        CreateMap<UpsertRunningCostsRequest, PropertyRunningCosts>().ReverseMap();
+        CreateMap<CreateRoomRequest, ListingRoom>().ReverseMap();
+        CreateMap<UpsertRoomConditionRequest, Condition>().ReverseMap();
+        CreateMap<AddCustomFeatureRequest, ListingRoomCustomFeature>().ReverseMap();
+        CreateMap<AddParkingRequest, ListingParking>().ReverseMap();
+        CreateMap<AddOutdoorFeatureRequest, ListingOutdoorFeature>().ReverseMap();
 
-        CreateMap<AddContactRequest, Contact>();
+        CreateMap<AddContactRequest, Contact>().ReverseMap();
 
         CreateMap<UpdateRoomRequest, ListingRoom>()
             .ForMember(dest => dest.Name, opt => opt.MapFrom(src => src.Name ?? string.Empty))
             .ForMember(dest => dest.RoomTypeId, opt => opt.MapFrom(src => src.RoomTypeId ?? 0));
 
-        CreateMap<UpdateContactRequest, Contact>();
+        CreateMap<UpdateContactRequest, Contact>().ReverseMap();
     }
 }
