@@ -2,9 +2,8 @@ using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using RealEstateApi.Application.Services;
-using RealEstateApi.Infrastructure.Data;
-using RealEstateApi.Infrastructure.Repositories;
-using RealEstateApi.Infrastructure.Services;
+using RealEstateApi.Infrastructure;
+using RealEstateApi.Infrastructure.Middleware;
 using RealEstateApi.Mappings;
 using Scalar.AspNetCore;
 
@@ -23,40 +22,17 @@ builder.Services.AddCors(options =>
 });
 
 // Infrastructure
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-builder.Services.AddSingleton(new DbConnectionFactory(connectionString!));
-
-builder.Services.AddScoped<LookupRepository>();
-builder.Services.AddScoped<ListingRepository>();
-builder.Services.AddScoped<ListingAddressRepository>();
-builder.Services.AddScoped<ListingBuildingInfoRepository>();
-builder.Services.AddScoped<ListingValuationRepository>();
-builder.Services.AddScoped<PropertyRunningCostsRepository>();
-builder.Services.AddScoped<ListingRoomRepository>();
-builder.Services.AddScoped<ListingParkingRepository>();
-builder.Services.AddScoped<ContactRepository>();
-builder.Services.AddScoped<ListingOutdoorFeatureRepository>();
-
-// Infrastructure Services
-builder.Services.Configure<R2Options>(builder.Configuration.GetSection(R2Options.SectionName));
-builder.Services.AddSingleton<R2ImageService>();
+builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddRepositories();
 
 // AutoMapper
 builder.Services.AddAutoMapper(cfg => cfg.AddProfile<MappingProfile>());
 
 // Application Services
-builder.Services.AddScoped<LookupService>();
-builder.Services.AddScoped<ListingService>();
-builder.Services.AddScoped<ListingRoomService>();
-builder.Services.AddScoped<ListingParkingService>();
-builder.Services.AddScoped<ListingContactService>();
-builder.Services.AddScoped<ListingOutdoorFeatureService>();
+builder.Services.AddApplicationServices();
 
 // Auth
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.SectionName));
-builder.Services.AddScoped<UserRepository>();
-builder.Services.AddScoped<RefreshTokenRepository>();
-builder.Services.AddScoped<AuthService>();
 
 var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>();
 var signingKey = Encoding.UTF8.GetBytes(jwtOptions!.Secret);
@@ -86,6 +62,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseCors("AllowAll");
+app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

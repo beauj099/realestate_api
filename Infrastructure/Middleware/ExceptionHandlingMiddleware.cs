@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.SqlClient;
 
 namespace RealEstateApi.Infrastructure.Middleware;
 
@@ -28,6 +29,28 @@ public class ExceptionHandlingMiddleware
                 Status = StatusCodes.Status404NotFound,
                 Title = "Not Found",
                 Detail = ex.Message
+            });
+        }
+        catch (SqlException ex) when (ex.Number is 2601 or 2627)
+        {
+            _logger.LogWarning(ex, "Unique constraint violation");
+            context.Response.StatusCode = StatusCodes.Status409Conflict;
+            await context.Response.WriteAsJsonAsync(new ProblemDetails
+            {
+                Status = StatusCodes.Status409Conflict,
+                Title = "Conflict",
+                Detail = "The resource already exists or violates a uniqueness constraint"
+            });
+        }
+        catch (SqlException ex) when (ex.Number == 547)
+        {
+            _logger.LogWarning(ex, "Foreign key constraint violation");
+            context.Response.StatusCode = StatusCodes.Status400BadRequest;
+            await context.Response.WriteAsJsonAsync(new ProblemDetails
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Bad Request",
+                Detail = "The operation violates a data integrity constraint"
             });
         }
         catch (Exception ex)

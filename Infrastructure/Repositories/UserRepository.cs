@@ -13,19 +13,21 @@ public class UserRepository
         _connectionFactory = connectionFactory;
     }
 
-    public async Task<User?> GetByUsernameAsync(string username)
+    public async Task<User?> GetByUsernameAsync(string username, CancellationToken cancellationToken = default)
     {
         using var connection = _connectionFactory.CreateConnection();
-        return await connection.QueryFirstOrDefaultAsync<User>(
+        var command = new CommandDefinition(
             "SELECT Id, Username, PasswordHash, DisplayName, Role, IsActive, CreatedAt FROM Users WHERE Username = @Username AND IsActive = 1",
-            new { Username = username });
+            new { Username = username }, cancellationToken: cancellationToken);
+        return await connection.QueryFirstOrDefaultAsync<User>(command);
     }
 
-    public async Task<User?> GetByIdAsync(int id)
+    public async Task<User?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
     {
         using var conn = _connectionFactory.CreateConnection();
-        return await conn.QueryFirstOrDefaultAsync<User>(
+        var command = new CommandDefinition(
             "SELECT Id, Username, PasswordHash, DisplayName, Role, IsActive, CreatedAt FROM Users WHERE Id = @Id",
-            new { Id = id });
+            new { Id = id }, cancellationToken: cancellationToken);
+        return await conn.QueryFirstOrDefaultAsync<User>(command);
     }
 }

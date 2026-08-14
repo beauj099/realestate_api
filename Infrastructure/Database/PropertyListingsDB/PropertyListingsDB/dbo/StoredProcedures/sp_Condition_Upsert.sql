@@ -2,7 +2,7 @@
 -- Room Condition
 CREATE   PROCEDURE sp_Condition_Upsert
     @ListingRoomId INT,
-    @ConditionRating INT = NULL,
+    @ConditionRating DECIMAL(3,1) = NULL,
     @Notes NVARCHAR(MAX) = NULL,
     @ConditionCategoryId INT
 AS

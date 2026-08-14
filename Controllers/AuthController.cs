@@ -16,9 +16,9 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("login")]
-    public async Task<IActionResult> Login([FromBody] LoginRequest request)
+    public async Task<IActionResult> Login([FromBody] LoginRequest request, CancellationToken cancellationToken)
     {
-        var result = await _authService.LoginAsync(request);
+        var result = await _authService.LoginAsync(request, cancellationToken);
         if (result is null)
             return Unauthorized(new { message = "Invalid username or password" });
 
@@ -26,9 +26,9 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("refresh")]
-    public async Task<IActionResult> Refresh([FromBody] RefreshTokenRequest request)
+    public async Task<IActionResult> Refresh([FromBody] RefreshTokenRequest request, CancellationToken cancellationToken)
     {
-        var result = await _authService.RefreshTokenAsync(request);
+        var result = await _authService.RefreshTokenAsync(request, cancellationToken);
         if (result is null)
             return Unauthorized(new { message = "Invalid or expired refresh token" });
 

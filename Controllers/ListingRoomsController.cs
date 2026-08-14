@@ -18,21 +18,21 @@ public class ListingRoomsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetAll(int listingId)
+    public async Task<IActionResult> GetAll(int listingId, CancellationToken cancellationToken)
     {
-        var result = await _roomService.GetRoomsAsync(listingId);
+        var result = await _roomService.GetRoomsAsync(listingId, cancellationToken);
         return Ok(result);
     }
 
     [HttpPost]
-    public async Task<IActionResult> Create(int listingId, [FromBody] CreateRoomRequest request)
+    public async Task<IActionResult> Create(int listingId, [FromBody] CreateRoomRequest request, CancellationToken cancellationToken)
     {
-        var result = await _roomService.CreateRoomAsync(listingId, request);
+        var result = await _roomService.CreateRoomAsync(listingId, request, cancellationToken);
         return CreatedAtAction(nameof(GetAll), new { listingId }, result);
     }
 
     [HttpPost("{roomId}/photo")]
-    public async Task<IActionResult> UploadPhoto(int listingId, int roomId, IFormFile file)
+    public async Task<IActionResult> UploadPhoto(int listingId, int roomId, IFormFile file, CancellationToken cancellationToken)
     {
         var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".webp" };
         var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
@@ -45,81 +45,81 @@ public class ListingRoomsController : ControllerBase
         var uniqueName = $"{Guid.NewGuid()}{ext}";
 
         await using var stream = file.OpenReadStream();
-        var result = await _roomService.UploadPhotoAsync(listingId, roomId, stream, uniqueName, file.ContentType);
+        var result = await _roomService.UploadPhotoAsync(listingId, roomId, stream, uniqueName, file.ContentType, cancellationToken);
         return Ok(result);
     }
 
     [HttpDelete("{roomId}/photo")]
-    public async Task<IActionResult> DeletePhoto(int listingId, int roomId)
+    public async Task<IActionResult> DeletePhoto(int listingId, int roomId, CancellationToken cancellationToken)
     {
-        await _roomService.DeletePhotoAsync(listingId, roomId);
+        await _roomService.DeletePhotoAsync(listingId, roomId, cancellationToken);
         return NoContent();
     }
 
     [HttpPut("{roomId}")]
-    public async Task<IActionResult> Update(int listingId, int roomId, [FromBody] UpdateRoomRequest request)
+    public async Task<IActionResult> Update(int listingId, int roomId, [FromBody] UpdateRoomRequest request, CancellationToken cancellationToken)
     {
-        var result = await _roomService.UpdateRoomAsync(listingId, roomId, request);
+        var result = await _roomService.UpdateRoomAsync(listingId, roomId, request, cancellationToken);
         if (result == null) return NotFound();
         return Ok(result);
     }
 
     [HttpDelete("{roomId}")]
-    public async Task<IActionResult> Delete(int listingId, int roomId)
+    public async Task<IActionResult> Delete(int listingId, int roomId, CancellationToken cancellationToken)
     {
-        await _roomService.DeleteRoomAsync(listingId, roomId);
+        await _roomService.DeleteRoomAsync(listingId, roomId, cancellationToken);
         return NoContent();
     }
 
     // Condition
     [HttpPut("{roomId}/condition")]
-    public async Task<IActionResult> UpsertCondition(int listingId, int roomId, [FromBody] UpsertRoomConditionRequest request)
+    public async Task<IActionResult> UpsertCondition(int listingId, int roomId, [FromBody] UpsertRoomConditionRequest request, CancellationToken cancellationToken)
     {
-        var result = await _roomService.UpsertConditionAsync(listingId, roomId, request);
+        var result = await _roomService.UpsertConditionAsync(listingId, roomId, request, cancellationToken);
         return Ok(result);
     }
 
     // Features (predefined)
     [HttpGet("{roomId}/features")]
-    public async Task<IActionResult> GetFeatures(int listingId, int roomId)
+    public async Task<IActionResult> GetFeatures(int listingId, int roomId, CancellationToken cancellationToken)
     {
-        var result = await _roomService.GetRoomFeaturesAsync(listingId, roomId);
+        var result = await _roomService.GetRoomFeaturesAsync(listingId, roomId, cancellationToken);
         return Ok(result);
     }
 
     [HttpPost("{roomId}/features")]
-    public async Task<IActionResult> LinkFeature(int listingId, int roomId, [FromBody] LinkFeatureRequest request)
+    public async Task<IActionResult> LinkFeature(int listingId, int roomId, [FromBody] LinkFeatureRequest request, CancellationToken cancellationToken)
     {
-        var result = await _roomService.LinkFeatureAsync(listingId, roomId, request.FeatureId);
+        var result = await _roomService.LinkFeatureAsync(listingId, roomId, request.FeatureId, cancellationToken);
         return StatusCode(201, result);
     }
 
     [HttpDelete("{roomId}/features/{featureId}")]
-    public async Task<IActionResult> UnlinkFeature(int listingId, int roomId, int featureId)
+    public async Task<IActionResult> UnlinkFeature(int listingId, int roomId, int featureId, CancellationToken cancellationToken)
     {
-        await _roomService.UnlinkFeatureAsync(listingId, roomId, featureId);
+        await _roomService.UnlinkFeatureAsync(listingId, roomId, featureId, cancellationToken);
         return NoContent();
     }
 
     // Custom Features
     [HttpGet("{roomId}/custom-features")]
-    public async Task<IActionResult> GetCustomFeatures(int listingId, int roomId)
+    public async Task<IActionResult> GetCustomFeatures(int listingId, int roomId, CancellationToken cancellationToken)
     {
-        var result = await _roomService.GetRoomCustomFeaturesAsync(listingId, roomId);
+        var result = await _roomService.GetRoomCustomFeaturesAsync(listingId, roomId, cancellationToken);
         return Ok(result);
     }
 
     [HttpPost("{roomId}/custom-features")]
-    public async Task<IActionResult> AddCustomFeature(int listingId, int roomId, [FromBody] AddCustomFeatureRequest request)
+    public async Task<IActionResult> AddCustomFeature(int listingId, int roomId, [FromBody] AddCustomFeatureRequest request, CancellationToken cancellationToken)
     {
-        var result = await _roomService.AddCustomFeatureAsync(listingId, roomId, request);
+        var result = await _roomService.AddCustomFeatureAsync(listingId, roomId, request, cancellationToken);
         return CreatedAtAction(nameof(GetAll), new { listingId }, result);
     }
 
     [HttpDelete("{roomId}/custom-features/{customFeatureId}")]
-    public async Task<IActionResult> DeleteCustomFeature(int listingId, int roomId, int customFeatureId)
+    public async Task<IActionResult> DeleteCustomFeature(int listingId, int roomId, int customFeatureId, CancellationToken cancellationToken)
     {
-        await _roomService.DeleteCustomFeatureAsync(listingId, roomId, customFeatureId);
+        await _roomService.DeleteCustomFeatureAsync(listingId, roomId, customFeatureId, cancellationToken);
         return NoContent();
     }
 }

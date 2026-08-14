@@ -6,6 +6,8 @@ namespace RealEstateApi.Infrastructure.Repositories;
 
 public class PropertyRunningCostsRepository
 {
+    private const string Columns = "Id, ListingId, MonthlyLevy, MonthlyRates, Electricity, Water";
+
     private readonly DbConnectionFactory _connectionFactory;
 
     public PropertyRunningCostsRepository(DbConnectionFactory connectionFactory)
@@ -13,24 +15,27 @@ public class PropertyRunningCostsRepository
         _connectionFactory = connectionFactory;
     }
 
-    public async Task<PropertyRunningCosts?> GetByListingIdAsync(int listingId)
+    public async Task<PropertyRunningCosts?> GetByListingIdAsync(int listingId, CancellationToken cancellationToken = default)
     {
         using var connection = _connectionFactory.CreateConnection();
-        return await connection.QueryFirstOrDefaultAsync<PropertyRunningCosts>(
-            "SELECT * FROM PropertyRunningCosts WHERE ListingId = @ListingId", new { ListingId = listingId });
+        var command = new CommandDefinition(
+            $"SELECT {Columns} FROM PropertyRunningCosts WHERE ListingId = @ListingId",
+            new { ListingId = listingId }, cancellationToken: cancellationToken);
+        return await connection.QueryFirstOrDefaultAsync<PropertyRunningCosts>(command);
     }
 
-    public async Task<PropertyRunningCosts> UpsertAsync(PropertyRunningCosts costs)
+    public async Task<PropertyRunningCosts> UpsertAsync(PropertyRunningCosts costs, CancellationToken cancellationToken = default)
     {
         using var connection = _connectionFactory.CreateConnection();
-        return await connection.QueryFirstOrDefaultAsync<PropertyRunningCosts>(
+        var command = new CommandDefinition(
             "MERGE PropertyRunningCosts AS t " +
             "USING (SELECT @ListingId AS ListingId) AS s " +
             "ON t.ListingId = s.ListingId " +
             "WHEN MATCHED THEN UPDATE SET MonthlyLevy = @MonthlyLevy, MonthlyRates = @MonthlyRates, Electricity = @Electricity, Water = @Water " +
             "WHEN NOT MATCHED THEN INSERT (ListingId, MonthlyLevy, MonthlyRates, Electricity, Water) " +
             "VALUES (@ListingId, @MonthlyLevy, @MonthlyRates, @Electricity, @Water) " +
-            "OUTPUT INSERTED.*;",
-            costs);
+            $"OUTPUT INSERTED.{Columns.Replace(", ", ", INSERTED.")};",
+            costs, cancellationToken: cancellationToken);
+        return await connection.QueryFirstOrDefaultAsync<PropertyRunningCosts>(command);
     }
 }

@@ -26,9 +26,9 @@ public class AuthService
         _jwtOptions = jwtOptions.Value;
     }
 
-    public async Task<LoginResponse?> LoginAsync(LoginRequest request)
+    public async Task<LoginResponse?> LoginAsync(LoginRequest request, CancellationToken cancellationToken = default)
     {
-        var user = await _userRepository.GetByUsernameAsync(request.Username);
+        var user = await _userRepository.GetByUsernameAsync(request.Username, cancellationToken);
         if (user is null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
             return null;
 
@@ -58,7 +58,7 @@ public class AuthService
         var refreshTokenRaw = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
         var refreshTokenHash = SHA256.HashData(Encoding.UTF8.GetBytes(refreshTokenRaw));
 
-        await _refreshTokenRepository.RevokeUserTokensAsync(user.Id);
+        await _refreshTokenRepository.RevokeUserTokensAsync(user.Id, cancellationToken);
 
         var refreshTokenEntity = new RefreshToken
         {
@@ -69,25 +69,25 @@ public class AuthService
             IsRevoked = false
         };
 
-        await _refreshTokenRepository.CreateAsync(refreshTokenEntity);
+        await _refreshTokenRepository.CreateAsync(refreshTokenEntity, cancellationToken);
 
         return new LoginResponse(tokenString, expires, user.DisplayName, user.Role, refreshTokenRaw);
     }
 
-    public async Task<RefreshTokenResponse?> RefreshTokenAsync(RefreshTokenRequest request)
+    public async Task<RefreshTokenResponse?> RefreshTokenAsync(RefreshTokenRequest request, CancellationToken cancellationToken = default)
     {
         var rawHash = SHA256.HashData(Encoding.UTF8.GetBytes(request.RefreshToken));
         var tokenHash = Convert.ToBase64String(rawHash);
 
-        var storedToken = await _refreshTokenRepository.GetByTokenHashAsync(tokenHash);
+        var storedToken = await _refreshTokenRepository.GetByTokenHashAsync(tokenHash, cancellationToken);
         if (storedToken is null || storedToken.IsRevoked || storedToken.ExpiresAt < DateTime.UtcNow)
             return null;
 
-        var user = await _userRepository.GetByIdAsync(storedToken.UserId);
+        var user = await _userRepository.GetByIdAsync(storedToken.UserId, cancellationToken);
         if (user is null || !user.IsActive)
             return null;
 
-        await _refreshTokenRepository.RevokeAsync(storedToken.Id);
+        await _refreshTokenRepository.RevokeAsync(storedToken.Id, cancellationToken);
 
         var tokenHandler = new JwtSecurityTokenHandler();
         var key = Encoding.UTF8.GetBytes(_jwtOptions.Secret);
@@ -125,7 +125,7 @@ public class AuthService
             IsRevoked = false
         };
 
-        await _refreshTokenRepository.CreateAsync(newRefreshEntity);
+        await _refreshTokenRepository.CreateAsync(newRefreshEntity, cancellationToken);
 
         return new RefreshTokenResponse(newAccessTokenString, expires, newRefreshRaw);
     }

@@ -13,29 +13,58 @@ public class ListingValuationRepository
         _connectionFactory = connectionFactory;
     }
 
-    public async Task<ListingValuation?> GetByListingIdAsync(int listingId)
+    public async Task<ListingValuation?> GetByListingIdAsync(int listingId, CancellationToken cancellationToken = default)
     {
         using var connection = _connectionFactory.CreateConnection();
-        return await connection.QueryFirstOrDefaultAsync<ListingValuation>(
+        var command = new CommandDefinition(
             "SELECT lv.Id, lv.OwnersNetPrice, lv.AgentValuation, lv.CommissionPercent " +
             "FROM ListingValuation lv INNER JOIN Listings l ON l.ListingValuationId = lv.Id WHERE l.Id = @ListingId",
-            new { ListingId = listingId });
+            new { ListingId = listingId }, cancellationToken: cancellationToken);
+        return await connection.QueryFirstOrDefaultAsync<ListingValuation>(command);
     }
 
-    public async Task<ListingValuation> UpsertAsync(int listingId, ListingValuation valuation)
+    public async Task<ListingValuation> UpsertAsync(int listingId, ListingValuation valuation, CancellationToken cancellationToken = default)
     {
         using var connection = _connectionFactory.CreateConnection();
-        return await connection.QueryFirstOrDefaultAsync<ListingValuation>(
-            "DECLARE @ValuationId INT; " +
-            "SELECT @ValuationId = ListingValuationId FROM Listings WHERE Id = @ListingId; " +
-            "IF @ValuationId IS NOT NULL " +
-            "UPDATE ListingValuation SET OwnersNetPrice = @OwnersNetPrice, AgentValuation = @AgentValuation, CommissionPercent = @CommissionPercent WHERE Id = @ValuationId; " +
-            "ELSE BEGIN " +
-            "INSERT INTO ListingValuation (OwnersNetPrice, AgentValuation, CommissionPercent) VALUES (@OwnersNetPrice, @AgentValuation, @CommissionPercent); " +
-            "SET @ValuationId = SCOPE_IDENTITY(); " +
-            "UPDATE Listings SET ListingValuationId = @ValuationId, UpdatedAt = GETUTCDATE() WHERE Id = @ListingId; " +
-            "END " +
-            "SELECT Id, OwnersNetPrice, AgentValuation, CommissionPercent FROM ListingValuation WHERE Id = @ValuationId;",
-            new { ListingId = listingId, valuation.OwnersNetPrice, valuation.AgentValuation, valuation.CommissionPercent });
+        connection.Open();
+        using var transaction = connection.BeginTransaction();
+
+        var lookupCommand = new CommandDefinition(
+            "SELECT ListingValuationId FROM Listings WITH (UPDLOCK, HOLDLOCK) WHERE Id = @ListingId",
+            new { ListingId = listingId }, transaction: transaction, cancellationToken: cancellationToken);
+        var valuationId = await connection.ExecuteScalarAsync<int?>(lookupCommand);
+
+        if (valuationId is null)
+        {
+            var insertCommand = new CommandDefinition(
+                "INSERT INTO ListingValuation (OwnersNetPrice, AgentValuation, CommissionPercent) " +
+                "OUTPUT INSERTED.Id " +
+                "VALUES (@OwnersNetPrice, @AgentValuation, @CommissionPercent)",
+                new { valuation.OwnersNetPrice, valuation.AgentValuation, valuation.CommissionPercent },
+                transaction: transaction, cancellationToken: cancellationToken);
+            valuationId = await connection.ExecuteScalarAsync<int>(insertCommand);
+
+            var linkCommand = new CommandDefinition(
+                "UPDATE Listings SET ListingValuationId = @ValuationId, UpdatedAt = GETUTCDATE() WHERE Id = @ListingId",
+                new { ValuationId = valuationId, ListingId = listingId },
+                transaction: transaction, cancellationToken: cancellationToken);
+            await connection.ExecuteAsync(linkCommand);
+        }
+        else
+        {
+            var updateCommand = new CommandDefinition(
+                "UPDATE ListingValuation SET OwnersNetPrice = @OwnersNetPrice, AgentValuation = @AgentValuation, CommissionPercent = @CommissionPercent WHERE Id = @Id",
+                new { valuation.OwnersNetPrice, valuation.AgentValuation, valuation.CommissionPercent, Id = valuationId },
+                transaction: transaction, cancellationToken: cancellationToken);
+            await connection.ExecuteAsync(updateCommand);
+        }
+
+        var selectCommand = new CommandDefinition(
+            "SELECT Id, OwnersNetPrice, AgentValuation, CommissionPercent FROM ListingValuation WHERE Id = @Id",
+            new { Id = valuationId }, transaction: transaction, cancellationToken: cancellationToken);
+        var result = await connection.QueryFirstOrDefaultAsync<ListingValuation>(selectCommand);
+
+        transaction.Commit();
+        return result!;
     }
 }

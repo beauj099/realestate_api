@@ -18,30 +18,30 @@ public class ListingOutdoorFeaturesController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetAll(int listingId)
+    public async Task<IActionResult> GetAll(int listingId, CancellationToken cancellationToken)
     {
-        var result = await _outdoorFeatureService.GetByListingIdAsync(listingId);
+        var result = await _outdoorFeatureService.GetByListingIdAsync(listingId, cancellationToken);
         return Ok(result);
     }
 
     [HttpPost]
-    public async Task<IActionResult> Add(int listingId, [FromBody] AddOutdoorFeatureRequest request)
+    public async Task<IActionResult> Add(int listingId, [FromBody] AddOutdoorFeatureRequest request, CancellationToken cancellationToken)
     {
-        var result = await _outdoorFeatureService.AddAsync(listingId, request);
+        var result = await _outdoorFeatureService.AddAsync(listingId, request, cancellationToken);
         return CreatedAtAction(nameof(GetAll), new { listingId }, result);
     }
 
     [HttpDelete("{id}")]
-    public async Task<IActionResult> Delete(int listingId, int id)
+    public async Task<IActionResult> Delete(int listingId, int id, CancellationToken cancellationToken)
     {
-        await _outdoorFeatureService.DeleteAsync(listingId, id);
+        await _outdoorFeatureService.DeleteAsync(listingId, id, cancellationToken);
         return NoContent();
     }
 
     [HttpPut]
-    public async Task<IActionResult> ReplaceAll(int listingId, [FromBody] ReplaceOutdoorFeaturesRequest request)
+    public async Task<IActionResult> ReplaceAll(int listingId, [FromBody] ReplaceOutdoorFeaturesRequest request, CancellationToken cancellationToken)
     {
-        var result = await _outdoorFeatureService.ReplaceAllAsync(listingId, request);
+        var result = await _outdoorFeatureService.ReplaceAllAsync(listingId, request, cancellationToken);
         return Ok(result);
     }
 }

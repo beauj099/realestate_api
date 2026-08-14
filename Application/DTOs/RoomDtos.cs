@@ -29,7 +29,7 @@ public record RoomDto(
 );
 
 public record UpsertRoomConditionRequest(
-    int? ConditionRating,
+    decimal? ConditionRating,
     string? Notes,
     int ConditionCategoryId
 );
@@ -37,7 +37,7 @@ public record UpsertRoomConditionRequest(
 public record RoomConditionDto(
     int Id,
     int ListingRoomId,
-    int? ConditionRating,
+    decimal? ConditionRating,
     string? Notes,
     int ConditionCategoryId
 );

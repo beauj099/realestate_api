@@ -6,6 +6,8 @@ namespace RealEstateApi.Infrastructure.Repositories;
 
 public class ListingAddressRepository
 {
+    private const string Columns = "ListingAddressId, ListingId, ErfNumber, EstateName, StreetNumber, UnitNumber, Street, Suburb, City, Province, Country, PostalCode, Latitude, Longitude";
+
     private readonly DbConnectionFactory _connectionFactory;
 
     public ListingAddressRepository(DbConnectionFactory connectionFactory)
@@ -13,17 +15,19 @@ public class ListingAddressRepository
         _connectionFactory = connectionFactory;
     }
 
-    public async Task<ListingAddress?> GetByListingIdAsync(int listingId)
+    public async Task<ListingAddress?> GetByListingIdAsync(int listingId, CancellationToken cancellationToken = default)
     {
         using var connection = _connectionFactory.CreateConnection();
-        return await connection.QueryFirstOrDefaultAsync<ListingAddress>(
-            "SELECT * FROM ListingAddress WHERE ListingId = @ListingId", new { ListingId = listingId });
+        var command = new CommandDefinition(
+            $"SELECT {Columns} FROM ListingAddress WHERE ListingId = @ListingId",
+            new { ListingId = listingId }, cancellationToken: cancellationToken);
+        return await connection.QueryFirstOrDefaultAsync<ListingAddress>(command);
     }
 
-    public async Task<ListingAddress> UpsertAsync(ListingAddress address)
+    public async Task<ListingAddress> UpsertAsync(ListingAddress address, CancellationToken cancellationToken = default)
     {
         using var connection = _connectionFactory.CreateConnection();
-        return await connection.QueryFirstOrDefaultAsync<ListingAddress>(
+        var command = new CommandDefinition(
             "MERGE ListingAddress AS t " +
             "USING (SELECT @ListingId AS ListingId) AS s " +
             "ON t.ListingId = s.ListingId " +
@@ -33,7 +37,8 @@ public class ListingAddressRepository
             "PostalCode = @PostalCode, Latitude = @Latitude, Longitude = @Longitude " +
             "WHEN NOT MATCHED THEN INSERT (ListingId, ErfNumber, EstateName, StreetNumber, UnitNumber, Street, Suburb, City, Province, Country, PostalCode, Latitude, Longitude) " +
             "VALUES (@ListingId, @ErfNumber, @EstateName, @StreetNumber, @UnitNumber, @Street, @Suburb, @City, @Province, @Country, @PostalCode, @Latitude, @Longitude) " +
-            "OUTPUT INSERTED.*;",
-            address);
+            $"OUTPUT INSERTED.{Columns.Replace(", ", ", INSERTED.")};",
+            address, cancellationToken: cancellationToken);
+        return await connection.QueryFirstOrDefaultAsync<ListingAddress>(command);
     }
 }

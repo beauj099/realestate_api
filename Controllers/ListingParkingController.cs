@@ -18,31 +18,31 @@ public class ListingParkingController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetAll(int listingId)
+    public async Task<IActionResult> GetAll(int listingId, CancellationToken cancellationToken)
     {
-        var result = await _parkingService.GetParkingAsync(listingId);
+        var result = await _parkingService.GetParkingAsync(listingId, cancellationToken);
         return Ok(result);
     }
 
     [HttpPost]
-    public async Task<IActionResult> Create(int listingId, [FromBody] AddParkingRequest request)
+    public async Task<IActionResult> Create(int listingId, [FromBody] AddParkingRequest request, CancellationToken cancellationToken)
     {
-        var result = await _parkingService.AddParkingAsync(listingId, request);
+        var result = await _parkingService.AddParkingAsync(listingId, request, cancellationToken);
         return CreatedAtAction(nameof(GetAll), new { listingId }, result);
     }
 
     [HttpPut("{parkingId}")]
-    public async Task<IActionResult> Update(int listingId, int parkingId, [FromBody] UpdateParkingRequest request)
+    public async Task<IActionResult> Update(int listingId, int parkingId, [FromBody] UpdateParkingRequest request, CancellationToken cancellationToken)
     {
-        var result = await _parkingService.UpdateParkingAsync(listingId, parkingId, request);
+        var result = await _parkingService.UpdateParkingAsync(listingId, parkingId, request, cancellationToken);
         if (result == null) return NotFound();
         return Ok(result);
     }
 
     [HttpDelete("{parkingId}")]
-    public async Task<IActionResult> Delete(int listingId, int parkingId)
+    public async Task<IActionResult> Delete(int listingId, int parkingId, CancellationToken cancellationToken)
     {
-        await _parkingService.DeleteParkingAsync(listingId, parkingId);
+        await _parkingService.DeleteParkingAsync(listingId, parkingId, cancellationToken);
         return NoContent();
     }
 }
