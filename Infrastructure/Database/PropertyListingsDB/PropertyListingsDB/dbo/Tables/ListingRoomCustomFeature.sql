@@ -3,7 +3,8 @@ CREATE TABLE [dbo].[ListingRoomCustomFeature] (
     [ListingRoomId] INT            NULL,
     [Description]   NVARCHAR (100) NULL,
     CONSTRAINT [PK_ListingRoomCustomFeature] PRIMARY KEY CLUSTERED ([Id] ASC),
-    CONSTRAINT [FK_ListingRoomCustomFeature_ListingRoom] FOREIGN KEY ([ListingRoomId]) REFERENCES [dbo].[ListingRoom] ([Id])
+    CONSTRAINT [FK_ListingRoomCustomFeature_ListingRoom] FOREIGN KEY ([ListingRoomId]) REFERENCES [dbo].[ListingRoom] ([Id]),
+    INDEX [IX_ListingRoomCustomFeature_ListingRoomId] NONCLUSTERED ([ListingRoomId] ASC)
 );
 
 

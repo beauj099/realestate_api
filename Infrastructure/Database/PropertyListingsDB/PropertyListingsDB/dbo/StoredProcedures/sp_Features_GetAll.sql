@@ -5,7 +5,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
     SELECT Id, Category, Description
-    FROM Features
+    FROM Feature
     ORDER BY Category, Description;
 END
 

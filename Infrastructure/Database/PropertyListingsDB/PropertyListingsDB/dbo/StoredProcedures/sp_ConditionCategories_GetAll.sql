@@ -5,7 +5,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
     SELECT Id, Description
-    FROM ConditionCategories
+    FROM ConditionCategory
     ORDER BY Description;
 END
 

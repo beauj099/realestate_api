@@ -5,7 +5,8 @@ CREATE TABLE [dbo].[ListingParking] (
     [Quantity]      INT NULL,
     CONSTRAINT [PK_ListingParking] PRIMARY KEY CLUSTERED ([Id] ASC),
     CONSTRAINT [FK_ListingParking_Listing] FOREIGN KEY ([ListingId]) REFERENCES [dbo].[Listings] ([Id]),
-    CONSTRAINT [FK_ListingParking_ParkingType] FOREIGN KEY ([ParkingTypeId]) REFERENCES [dbo].[ParkingType] ([Id])
+    CONSTRAINT [FK_ListingParking_ParkingType] FOREIGN KEY ([ParkingTypeId]) REFERENCES [dbo].[ParkingType] ([Id]),
+    INDEX [IX_ListingParking_ListingId] NONCLUSTERED ([ListingId] ASC)
 );
 
 

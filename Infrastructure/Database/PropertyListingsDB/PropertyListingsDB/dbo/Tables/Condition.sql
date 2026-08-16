@@ -6,7 +6,9 @@ CREATE TABLE [dbo].[Condition] (
     [ConditionCategoryId] INT            NULL,
     CONSTRAINT [PK_Condition] PRIMARY KEY CLUSTERED ([Id] ASC),
     CONSTRAINT [FK_Condition_ConditionCategory] FOREIGN KEY ([ConditionCategoryId]) REFERENCES [dbo].[ConditionCategory] ([Id]),
-    CONSTRAINT [FK_Condition_ListingRoom] FOREIGN KEY ([ListingRoomId]) REFERENCES [dbo].[ListingRoom] ([Id])
+    CONSTRAINT [FK_Condition_ListingRoom] FOREIGN KEY ([ListingRoomId]) REFERENCES [dbo].[ListingRoom] ([Id]),
+    -- sp_Condition_Upsert assumes at most one condition row per room; enforce it.
+    CONSTRAINT [UX_Condition_ListingRoomId] UNIQUE NONCLUSTERED ([ListingRoomId] ASC)
 );
 
 

@@ -35,7 +35,34 @@ builder.Services.AddApplicationServices();
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.SectionName));
 
 var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>();
-var signingKey = Encoding.UTF8.GetBytes(jwtOptions!.Secret);
+
+// Fail fast if the JWT signing secret is missing, too weak, or left as the committed
+// placeholder. appsettings.json is a template only -- the real secret must come from
+// outside source control, e.g. `dotnet user-secrets set "Jwt:Secret" "<64+ random chars>"`
+// or a JWT__SECRET environment variable. Without this check the API would happily sign
+// every token with a value that is public in the repository.
+if (jwtOptions is null || string.IsNullOrWhiteSpace(jwtOptions.Secret))
+{
+    throw new InvalidOperationException(
+        "Jwt:Secret is not configured. Set it via user-secrets or the JWT__SECRET " +
+        "environment variable; it must not be stored in appsettings.json.");
+}
+
+if (jwtOptions.Secret.StartsWith("CHANGE-ME", StringComparison.OrdinalIgnoreCase))
+{
+    throw new InvalidOperationException(
+        "Jwt:Secret is still the placeholder value. Replace it with a real secret " +
+        "supplied outside source control.");
+}
+
+// HMAC-SHA256 requires a key of at least 256 bits.
+if (Encoding.UTF8.GetByteCount(jwtOptions.Secret) < 32)
+{
+    throw new InvalidOperationException(
+        "Jwt:Secret is too short. It must be at least 32 bytes (256 bits) for HMAC-SHA256.");
+}
+
+var signingKey = Encoding.UTF8.GetBytes(jwtOptions.Secret);
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
