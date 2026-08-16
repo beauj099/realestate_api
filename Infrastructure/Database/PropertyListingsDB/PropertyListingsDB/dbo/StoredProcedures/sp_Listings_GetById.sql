@@ -6,7 +6,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
     SELECT Id, ReferenceNumber, P24Ref, PropertyTypeId, ListingValuationId, ListDate, Status, CreatedAt, UpdatedAt
-    FROM Listings
+    FROM Listing
     WHERE Id = @Id;
 END
 

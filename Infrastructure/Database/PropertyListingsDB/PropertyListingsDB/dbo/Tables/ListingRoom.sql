@@ -8,17 +8,18 @@ CREATE TABLE [dbo].[ListingRoom] (
     [CreatedAt]     DATETIME2 (7)  NOT NULL,
     [UpdatedAt]     DATETIME2 (7)  NOT NULL,
     CONSTRAINT [PK__ListingR__B5B0CB527A653047] PRIMARY KEY CLUSTERED ([Id] ASC),
+    INDEX [IX_ListingRoom_ListingId] NONCLUSTERED ([ListingId] ASC),
     CONSTRAINT [FK__ListingRo__Listi__7D98A078] FOREIGN KEY ([ListingId]) REFERENCES [dbo].[Listing] ([Id]) ON DELETE CASCADE,
     CONSTRAINT [FK_ListingRoom_RoomTypes] FOREIGN KEY ([RoomTypeId]) REFERENCES [dbo].[RoomTypes] ([Id])
 );
 
 
 GO
-ALTER TABLE [dbo].[ListingRoom] NOCHECK CONSTRAINT [FK__ListingRo__Listi__7D98A078];
+ALTER TABLE [dbo].[ListingRoom] WITH CHECK CHECK CONSTRAINT [FK__ListingRo__Listi__7D98A078];
 
 
 GO
-ALTER TABLE [dbo].[ListingRoom] NOCHECK CONSTRAINT [FK_ListingRoom_RoomTypes];
+ALTER TABLE [dbo].[ListingRoom] WITH CHECK CHECK CONSTRAINT [FK_ListingRoom_RoomTypes];
 
 
 GO

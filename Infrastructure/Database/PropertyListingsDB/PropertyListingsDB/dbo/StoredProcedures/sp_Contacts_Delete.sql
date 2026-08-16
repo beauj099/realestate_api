@@ -4,7 +4,7 @@ CREATE   PROCEDURE sp_Contacts_Delete
 AS
 BEGIN
     SET NOCOUNT ON;
-    DELETE FROM Contacts WHERE Id = @Id;
+    DELETE FROM Contact WHERE Id = @Id;
 END
 
 GO

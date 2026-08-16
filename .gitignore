@@ -361,3 +361,9 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# Local secrets / environment overrides — never commit real credentials.
+# appsettings.json stays committed as a template with EMPTY secret values;
+# real JWT secret, connection string and R2 keys belong in user-secrets or env vars.
+appsettings.Development.json
+appsettings.*.local.json

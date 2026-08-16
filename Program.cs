@@ -8,12 +8,17 @@ using RealEstateApi.Infrastructure.Data;
 using RealEstateApi.Infrastructure.Repositories;
 using RealEstateApi.Infrastructure.Services;
 using RealEstateApi.Mappings;
+using RealEstateApi.Middleware;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
+
+// Consistent error responses: map exceptions (e.g. KeyNotFoundException -> 404) to ProblemDetails.
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+builder.Services.AddProblemDetails();
 
 // Infrastructure
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
@@ -37,6 +42,7 @@ builder.Services.AddSingleton<IImageService, R2ImageService>();
 builder.Services.AddAutoMapper(cfg => cfg.AddProfile<MappingProfile>());
 
 // Application Services
+builder.Services.AddScoped<IRoomAssembler, RoomAssembler>();
 builder.Services.AddScoped<ILookupService, LookupService>();
 builder.Services.AddScoped<IListingService, ListingService>();
 builder.Services.AddScoped<IListingRoomService, ListingRoomService>();
@@ -49,7 +55,23 @@ builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 
 var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>();
-var signingKey = Encoding.UTF8.GetBytes(jwtOptions!.Secret);
+
+// Fail fast if the JWT signing secret is missing, too weak, or left as the placeholder.
+// The real secret must be supplied outside source control (user-secrets / environment
+// variable / key vault), e.g. `dotnet user-secrets set "Jwt:Secret" "<64+ random chars>"`
+// or the `Jwt__Secret` environment variable.
+const string jwtPlaceholder = "CHANGE-ME-to-a-secret-key-at-least-32-characters-long";
+if (jwtOptions is null ||
+    string.IsNullOrWhiteSpace(jwtOptions.Secret) ||
+    jwtOptions.Secret == jwtPlaceholder ||
+    Encoding.UTF8.GetByteCount(jwtOptions.Secret) < 32)
+{
+    throw new InvalidOperationException(
+        "Jwt:Secret is not configured with a secure value. Set a random secret of at least " +
+        "32 bytes via user-secrets or the 'Jwt__Secret' environment variable; it must never be committed to source control.");
+}
+
+var signingKey = Encoding.UTF8.GetBytes(jwtOptions.Secret);
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -67,6 +89,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 var app = builder.Build();
+
+app.UseExceptionHandler();
 
 if (app.Environment.IsDevelopment())
 {

@@ -5,6 +5,7 @@ namespace RealEstateApi.Application.Interfaces;
 public interface IListingRoomRepository
 {
     Task<IEnumerable<ListingRoom>> GetByListingIdAsync(int listingId);
+    Task<RoomDetails> GetRoomDetailsByListingIdAsync(int listingId);
     Task<ListingRoom?> GetByIdAsync(int id);
     Task<ListingRoom> CreateAsync(ListingRoom room);
     Task<ListingRoom?> UpdateAsync(ListingRoom room);

@@ -1,165 +1,90 @@
-using Dapper;
 using RealEstateApi.Application.Interfaces;
 using RealEstateApi.Domain.Models;
 using RealEstateApi.Infrastructure.Data;
-using System.Data;
 
 namespace RealEstateApi.Infrastructure.Repositories;
 
-public class ListingRoomRepository : IListingRoomRepository
+public class ListingRoomRepository : DapperRepository, IListingRoomRepository
 {
-    private readonly DbConnectionFactory _connectionFactory;
-
-    public ListingRoomRepository(DbConnectionFactory connectionFactory)
+    public ListingRoomRepository(DbConnectionFactory connectionFactory) : base(connectionFactory)
     {
-        _connectionFactory = connectionFactory;
     }
 
-    public async Task<IEnumerable<ListingRoom>> GetByListingIdAsync(int listingId)
-    {
-        using var connection = _connectionFactory.CreateConnection();
-        return await connection.QueryAsync<ListingRoom>(
-            "sp_ListingRooms_GetByListingId",
+    public Task<IEnumerable<ListingRoom>> GetByListingIdAsync(int listingId) =>
+        QueryProcAsync<ListingRoom>("sp_ListingRooms_GetByListingId", new { ListingId = listingId });
+
+    public Task<RoomDetails> GetRoomDetailsByListingIdAsync(int listingId) =>
+        QueryMultipleProcAsync(
+            "sp_ListingRooms_GetDetailsByListingId",
             new { ListingId = listingId },
-            commandType: CommandType.StoredProcedure);
-    }
+            async multi =>
+            {
+                var rooms = (await multi.ReadAsync<ListingRoom>()).ToList();
+                var conditions = (await multi.ReadAsync<Condition>()).ToList();
+                var features = (await multi.ReadAsync<RoomLinkedFeature>()).ToList();
+                var customFeatures = (await multi.ReadAsync<ListingRoomCustomFeature>()).ToList();
+                return new RoomDetails(rooms, conditions, features, customFeatures);
+            });
 
-    public async Task<ListingRoom?> GetByIdAsync(int id)
-    {
-        using var connection = _connectionFactory.CreateConnection();
-        return await connection.QueryFirstOrDefaultAsync<ListingRoom>(
+    public Task<ListingRoom?> GetByIdAsync(int id) =>
+        QuerySingleOrDefaultSqlAsync<ListingRoom>(
             "SELECT Id, ListingId, Name, RoomTypeId, RoomTypeOther, PhotoUrl, CreatedAt, UpdatedAt FROM ListingRoom WHERE Id = @Id",
             new { Id = id });
-    }
 
-    public async Task UpdatePhotoUrlAsync(int roomId, string? photoUrl)
-    {
-        using var connection = _connectionFactory.CreateConnection();
-        await connection.ExecuteAsync(
+    public Task UpdatePhotoUrlAsync(int roomId, string? photoUrl) =>
+        ExecuteSqlAsync(
             "UPDATE ListingRoom SET PhotoUrl = @PhotoUrl, UpdatedAt = GETUTCDATE() WHERE Id = @Id",
             new { Id = roomId, PhotoUrl = photoUrl });
-    }
 
-    public async Task<ListingRoom> CreateAsync(ListingRoom room)
-    {
-        using var connection = _connectionFactory.CreateConnection();
-        return await connection.QueryFirstOrDefaultAsync<ListingRoom>(
+    public Task<ListingRoom> CreateAsync(ListingRoom room) =>
+        QuerySingleProcAsync<ListingRoom>(
             "sp_ListingRooms_Create",
-            new
-            {
-                ListingId = room.ListingId,
-                Name = room.Name,
-                RoomTypeId = room.RoomTypeId,
-                RoomTypeOther = room.RoomTypeOther,
-                PhotoUrl = room.PhotoUrl
-            },
-            commandType: CommandType.StoredProcedure);
-    }
+            new { room.ListingId, room.Name, room.RoomTypeId, room.RoomTypeOther, room.PhotoUrl });
 
-    public async Task<ListingRoom?> UpdateAsync(ListingRoom room)
-    {
-        using var connection = _connectionFactory.CreateConnection();
-        return await connection.QueryFirstOrDefaultAsync<ListingRoom>(
+    public Task<ListingRoom?> UpdateAsync(ListingRoom room) =>
+        QuerySingleOrDefaultProcAsync<ListingRoom>(
             "sp_ListingRooms_Update",
-            new
-            {
-                Id = room.Id,
-                Name = room.Name,
-                RoomTypeId = room.RoomTypeId,
-                RoomTypeOther = room.RoomTypeOther,
-                PhotoUrl = room.PhotoUrl
-            },
-            commandType: CommandType.StoredProcedure);
-    }
+            new { room.Id, room.Name, room.RoomTypeId, room.RoomTypeOther, room.PhotoUrl });
 
-    public async Task DeleteAsync(int id)
-    {
-        using var connection = _connectionFactory.CreateConnection();
-        await connection.ExecuteAsync(
-            "sp_ListingRooms_Delete",
-            new { Id = id },
-            commandType: CommandType.StoredProcedure);
-    }
+    public Task DeleteAsync(int id) =>
+        ExecuteProcAsync("sp_ListingRooms_Delete", new { Id = id });
 
-    public async Task<Condition?> GetConditionByRoomIdAsync(int listingRoomId)
-    {
-        using var connection = _connectionFactory.CreateConnection();
-        return await connection.QueryFirstOrDefaultAsync<Condition>(
-            "sp_Condition_GetByListingRoomId",
-            new { ListingRoomId = listingRoomId },
-            commandType: CommandType.StoredProcedure);
-    }
+    public Task<Condition?> GetConditionByRoomIdAsync(int listingRoomId) =>
+        QuerySingleOrDefaultProcAsync<Condition>(
+            "sp_Condition_GetByListingRoomId", new { ListingRoomId = listingRoomId });
 
-    public async Task<Condition> UpsertConditionAsync(Condition condition)
-    {
-        using var connection = _connectionFactory.CreateConnection();
-        return await connection.QueryFirstOrDefaultAsync<Condition>(
+    public Task<Condition> UpsertConditionAsync(Condition condition) =>
+        QuerySingleProcAsync<Condition>(
             "sp_Condition_Upsert",
             new
             {
-                ListingRoomId = condition.ListingRoomId,
-                ConditionRating = condition.ConditionRating,
-                Notes = condition.Notes,
-                ConditionCategoryId = condition.ConditionCategoryId
-            },
-            commandType: CommandType.StoredProcedure);
-    }
+                condition.ListingRoomId,
+                condition.ConditionRating,
+                condition.Notes,
+                condition.ConditionCategoryId
+            });
 
-    public async Task<IEnumerable<Feature>> GetLinkedFeaturesAsync(int listingRoomId)
-    {
-        using var connection = _connectionFactory.CreateConnection();
-        return await connection.QueryAsync<Feature>(
-            "sp_ListingRoomFeatures_GetByListingRoomId",
-            new { ListingRoomId = listingRoomId },
-            commandType: CommandType.StoredProcedure);
-    }
+    public Task<IEnumerable<Feature>> GetLinkedFeaturesAsync(int listingRoomId) =>
+        QueryProcAsync<Feature>(
+            "sp_ListingRoomFeatures_GetByListingRoomId", new { ListingRoomId = listingRoomId });
 
-    public async Task<IEnumerable<Feature>> LinkFeatureAsync(int listingRoomId, int featureId)
-    {
-        using var connection = _connectionFactory.CreateConnection();
-        return await connection.QueryAsync<Feature>(
-            "sp_ListingRoomFeatures_Link",
-            new { ListingRoomId = listingRoomId, FeatureId = featureId },
-            commandType: CommandType.StoredProcedure);
-    }
+    public Task<IEnumerable<Feature>> LinkFeatureAsync(int listingRoomId, int featureId) =>
+        QueryProcAsync<Feature>(
+            "sp_ListingRoomFeatures_Link", new { ListingRoomId = listingRoomId, FeatureId = featureId });
 
-    public async Task<IEnumerable<Feature>> UnlinkFeatureAsync(int listingRoomId, int featureId)
-    {
-        using var connection = _connectionFactory.CreateConnection();
-        return await connection.QueryAsync<Feature>(
-            "sp_ListingRoomFeatures_Unlink",
-            new { ListingRoomId = listingRoomId, FeatureId = featureId },
-            commandType: CommandType.StoredProcedure);
-    }
+    public Task<IEnumerable<Feature>> UnlinkFeatureAsync(int listingRoomId, int featureId) =>
+        QueryProcAsync<Feature>(
+            "sp_ListingRoomFeatures_Unlink", new { ListingRoomId = listingRoomId, FeatureId = featureId });
 
-    public async Task<IEnumerable<ListingRoomCustomFeature>> GetCustomFeaturesAsync(int listingRoomId)
-    {
-        using var connection = _connectionFactory.CreateConnection();
-        return await connection.QueryAsync<ListingRoomCustomFeature>(
-            "sp_ListingRoomCustomFeatures_GetByListingRoomId",
-            new { ListingRoomId = listingRoomId },
-            commandType: CommandType.StoredProcedure);
-    }
+    public Task<IEnumerable<ListingRoomCustomFeature>> GetCustomFeaturesAsync(int listingRoomId) =>
+        QueryProcAsync<ListingRoomCustomFeature>(
+            "sp_ListingRoomCustomFeatures_GetByListingRoomId", new { ListingRoomId = listingRoomId });
 
-    public async Task<ListingRoomCustomFeature> AddCustomFeatureAsync(ListingRoomCustomFeature feature)
-    {
-        using var connection = _connectionFactory.CreateConnection();
-        return await connection.QueryFirstOrDefaultAsync<ListingRoomCustomFeature>(
+    public Task<ListingRoomCustomFeature> AddCustomFeatureAsync(ListingRoomCustomFeature feature) =>
+        QuerySingleProcAsync<ListingRoomCustomFeature>(
             "sp_ListingRoomCustomFeatures_Add",
-            new
-            {
-                ListingRoomId = feature.ListingRoomId,
-                Description = feature.Description
-            },
-            commandType: CommandType.StoredProcedure);
-    }
+            new { feature.ListingRoomId, feature.Description });
 
-    public async Task DeleteCustomFeatureAsync(int id)
-    {
-        using var connection = _connectionFactory.CreateConnection();
-        await connection.ExecuteAsync(
-            "sp_ListingRoomCustomFeatures_Remove",
-            new { Id = id },
-            commandType: CommandType.StoredProcedure);
-    }
+    public Task DeleteCustomFeatureAsync(int id) =>
+        ExecuteProcAsync("sp_ListingRoomCustomFeatures_Remove", new { Id = id });
 }

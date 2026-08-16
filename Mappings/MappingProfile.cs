@@ -12,6 +12,7 @@ public class MappingProfile : Profile
         CreateMap<PropertyType, PropertyTypeDto>();
         CreateMap<RoomType, RoomTypeDto>();
         CreateMap<Feature, FeatureDto>();
+        CreateMap<RoomLinkedFeature, FeatureDto>();
         CreateMap<ConditionCategory, ConditionCategoryDto>();
         CreateMap<ParkingType, ParkingTypeDto>();
         CreateMap<Facing, FacingDto>();

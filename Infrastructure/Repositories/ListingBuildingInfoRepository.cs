@@ -1,43 +1,29 @@
-using Dapper;
 using RealEstateApi.Application.Interfaces;
 using RealEstateApi.Domain.Models;
 using RealEstateApi.Infrastructure.Data;
-using System.Data;
 
 namespace RealEstateApi.Infrastructure.Repositories;
 
-public class ListingBuildingInfoRepository : IListingBuildingInfoRepository
+public class ListingBuildingInfoRepository : DapperRepository, IListingBuildingInfoRepository
 {
-    private readonly DbConnectionFactory _connectionFactory;
-
-    public ListingBuildingInfoRepository(DbConnectionFactory connectionFactory)
+    public ListingBuildingInfoRepository(DbConnectionFactory connectionFactory) : base(connectionFactory)
     {
-        _connectionFactory = connectionFactory;
     }
 
-    public async Task<ListingBuildingInfo?> GetByListingIdAsync(int listingId)
-    {
-        using var connection = _connectionFactory.CreateConnection();
-        return await connection.QueryFirstOrDefaultAsync<ListingBuildingInfo>(
-            "sp_ListingBuildingInfo_GetByListingId",
-            new { ListingId = listingId },
-            commandType: CommandType.StoredProcedure);
-    }
+    public Task<ListingBuildingInfo?> GetByListingIdAsync(int listingId) =>
+        QuerySingleOrDefaultProcAsync<ListingBuildingInfo>(
+            "sp_ListingBuildingInfo_GetByListingId", new { ListingId = listingId });
 
-    public async Task<ListingBuildingInfo> UpsertAsync(ListingBuildingInfo info)
-    {
-        using var connection = _connectionFactory.CreateConnection();
-        return await connection.QueryFirstOrDefaultAsync<ListingBuildingInfo>(
+    public Task<ListingBuildingInfo> UpsertAsync(ListingBuildingInfo info) =>
+        QuerySingleProcAsync<ListingBuildingInfo>(
             "sp_ListingBuildingInfo_Upsert",
             new
             {
-                ListingId = info.ListingId,
-                ErfSize = info.ErfSize,
-                FloorArea = info.FloorArea,
-                ConstructionYear = info.ConstructionYear,
-                FacingId = info.FacingId,
-                ZoningId = info.ZoningId
-            },
-            commandType: CommandType.StoredProcedure);
-    }
+                info.ListingId,
+                info.ErfSize,
+                info.FloorArea,
+                info.ConstructionYear,
+                info.FacingId,
+                info.ZoningId
+            });
 }

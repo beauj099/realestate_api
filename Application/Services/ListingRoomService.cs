@@ -11,6 +11,7 @@ public class ListingRoomService : IListingRoomService
 {
     private readonly IListingRepository _listingRepo;
     private readonly IListingRoomRepository _roomRepo;
+    private readonly IRoomAssembler _roomAssembler;
     private readonly IImageService _imageService;
     private readonly IOptions<R2Options> _r2Options;
     private readonly IMapper _mapper;
@@ -18,12 +19,14 @@ public class ListingRoomService : IListingRoomService
     public ListingRoomService(
         IListingRepository listingRepo,
         IListingRoomRepository roomRepo,
+        IRoomAssembler roomAssembler,
         IImageService imageService,
         IOptions<R2Options> r2Options,
         IMapper mapper)
     {
         _listingRepo = listingRepo;
         _roomRepo = roomRepo;
+        _roomAssembler = roomAssembler;
         _imageService = imageService;
         _r2Options = r2Options;
         _mapper = mapper;
@@ -34,27 +37,7 @@ public class ListingRoomService : IListingRoomService
         var listing = await _listingRepo.GetByIdAsync(listingId);
         if (listing == null) throw new KeyNotFoundException($"Listing {listingId} not found");
 
-        var rooms = await _roomRepo.GetByListingIdAsync(listingId);
-        var roomDtos = new List<RoomDto>();
-
-        foreach (var room in rooms)
-        {
-            var conditionTask = _roomRepo.GetConditionByRoomIdAsync(room.Id);
-            var featuresTask = _roomRepo.GetLinkedFeaturesAsync(room.Id);
-            var customFeaturesTask = _roomRepo.GetCustomFeaturesAsync(room.Id);
-
-            await Task.WhenAll(conditionTask, featuresTask, customFeaturesTask);
-
-            roomDtos.Add(new RoomDto(
-                room.Id, room.ListingId, room.Name, room.RoomTypeId,
-                room.RoomTypeOther, room.PhotoUrl, room.CreatedAt, room.UpdatedAt,
-                conditionTask.Result is null ? null : _mapper.Map<RoomConditionDto>(conditionTask.Result),
-                featuresTask.Result.Select(f => _mapper.Map<FeatureDto>(f)).ToList(),
-                customFeaturesTask.Result.Select(cf => _mapper.Map<CustomFeatureDto>(cf)).ToList()
-            ));
-        }
-
-        return roomDtos;
+        return await _roomAssembler.GetRoomDtosAsync(listingId);
     }
 
     public async Task<RoomDto> CreateRoomAsync(int listingId, CreateRoomRequest request)

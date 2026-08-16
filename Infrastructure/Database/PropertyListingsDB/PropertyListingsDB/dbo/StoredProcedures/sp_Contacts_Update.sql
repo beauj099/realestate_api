@@ -11,7 +11,7 @@ CREATE   PROCEDURE sp_Contacts_Update
 AS
 BEGIN
     SET NOCOUNT ON;
-    UPDATE Contacts
+    UPDATE Contact
     SET FullName = COALESCE(@FullName, FullName),
         IdNumber = COALESCE(@IdNumber, IdNumber),
         CompanyName = COALESCE(@CompanyName, CompanyName),
@@ -22,7 +22,7 @@ BEGIN
     WHERE Id = @Id;
 
     SELECT Id, FullName, IdNumber, CompanyName, CompanyRegistrationNumber, MobilePhone, EmailAddress, Role, ListingId
-    FROM Contacts
+    FROM Contact
     WHERE Id = @Id;
 END
 

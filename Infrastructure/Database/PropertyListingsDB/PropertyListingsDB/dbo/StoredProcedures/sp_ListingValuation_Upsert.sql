@@ -13,7 +13,7 @@ BEGIN
 
     DECLARE @ValuationId INT;
 
-    SELECT @ValuationId = ListingValuationId FROM Listings WHERE Id = @ListingId;
+    SELECT @ValuationId = ListingValuationId FROM Listing WHERE Id = @ListingId;
 
     IF @ValuationId IS NOT NULL
     BEGIN
@@ -30,7 +30,7 @@ BEGIN
 
         SET @ValuationId = SCOPE_IDENTITY();
 
-        UPDATE Listings
+        UPDATE Listing
         SET ListingValuationId = @ValuationId, UpdatedAt = GETUTCDATE()
         WHERE Id = @ListingId;
     END

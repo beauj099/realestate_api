@@ -1,71 +1,36 @@
-using Dapper;
 using RealEstateApi.Application.Interfaces;
 using RealEstateApi.Domain.Models;
 using RealEstateApi.Infrastructure.Data;
-using System.Data;
 
 namespace RealEstateApi.Infrastructure.Repositories;
 
-public class ListingRepository : IListingRepository
+public class ListingRepository : DapperRepository, IListingRepository
 {
-    private readonly DbConnectionFactory _connectionFactory;
-
-    public ListingRepository(DbConnectionFactory connectionFactory)
+    public ListingRepository(DbConnectionFactory connectionFactory) : base(connectionFactory)
     {
-        _connectionFactory = connectionFactory;
     }
 
-    public async Task<Listing?> GetByIdAsync(int id)
-    {
-        using var connection = _connectionFactory.CreateConnection();
-        return await connection.QueryFirstOrDefaultAsync<Listing>(
-            "sp_Listings_GetById",
-            new { Id = id },
-            commandType: CommandType.StoredProcedure);
-    }
+    public Task<Listing?> GetByIdAsync(int id) =>
+        QuerySingleOrDefaultProcAsync<Listing>("sp_Listings_GetById", new { Id = id });
 
-    public async Task<IEnumerable<Listing>> GetAllAsync(string? status, DateTime? dateFrom, DateTime? dateTo)
-    {
-        using var connection = _connectionFactory.CreateConnection();
-        return await connection.QueryAsync<Listing>(
+    public Task<IEnumerable<Listing>> GetAllAsync(string? status, DateTime? dateFrom, DateTime? dateTo) =>
+        QueryProcAsync<Listing>(
             "sp_Listings_GetAll",
-            new { Status = status, DateFrom = dateFrom, DateTo = dateTo },
-            commandType: CommandType.StoredProcedure);
-    }
+            new { Status = status, DateFrom = dateFrom, DateTo = dateTo });
 
-    public async Task<Listing> CreateAsync(int propertyTypeId, string? p24Ref)
-    {
-        using var connection = _connectionFactory.CreateConnection();
-        return await connection.QueryFirstOrDefaultAsync<Listing>(
+    public Task<Listing> CreateAsync(int propertyTypeId, string? p24Ref) =>
+        QuerySingleProcAsync<Listing>(
             "sp_Listings_Create",
-            new { PropertyTypeId = propertyTypeId, P24Ref = p24Ref },
-            commandType: CommandType.StoredProcedure);
-    }
+            new { PropertyTypeId = propertyTypeId, P24Ref = p24Ref });
 
-    public async Task<Listing?> UpdateAsync(int id, string? status, string? p24Ref, int? propertyTypeId)
-    {
-        using var connection = _connectionFactory.CreateConnection();
-        return await connection.QueryFirstOrDefaultAsync<Listing>(
+    public Task<Listing?> UpdateAsync(int id, string? status, string? p24Ref, int? propertyTypeId) =>
+        QuerySingleOrDefaultProcAsync<Listing>(
             "sp_Listings_Update",
-            new { Id = id, Status = status, P24Ref = p24Ref, PropertyTypeId = propertyTypeId },
-            commandType: CommandType.StoredProcedure);
-    }
+            new { Id = id, Status = status, P24Ref = p24Ref, PropertyTypeId = propertyTypeId });
 
-    public async Task DeleteAsync(int id)
-    {
-        using var connection = _connectionFactory.CreateConnection();
-        await connection.ExecuteAsync(
-            "sp_Listings_Delete",
-            new { Id = id },
-            commandType: CommandType.StoredProcedure);
-    }
+    public Task DeleteAsync(int id) =>
+        ExecuteProcAsync("sp_Listings_Delete", new { Id = id });
 
-    public async Task<Listing?> SubmitAsync(int id)
-    {
-        using var connection = _connectionFactory.CreateConnection();
-        return await connection.QueryFirstOrDefaultAsync<Listing>(
-            "sp_Listings_Submit",
-            new { Id = id },
-            commandType: CommandType.StoredProcedure);
-    }
+    public Task<Listing?> SubmitAsync(int id) =>
+        QuerySingleOrDefaultProcAsync<Listing>("sp_Listings_Submit", new { Id = id });
 }

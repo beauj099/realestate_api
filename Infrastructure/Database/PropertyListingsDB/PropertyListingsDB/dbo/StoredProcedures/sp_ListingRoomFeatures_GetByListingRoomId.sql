@@ -7,7 +7,7 @@ BEGIN
     SET NOCOUNT ON;
     SELECT f.Id, f.Category, f.Description
     FROM ListingRoomFeature lrf
-    INNER JOIN Features f ON f.Id = lrf.FeatureId
+    INNER JOIN Feature f ON f.Id = lrf.FeatureId
     WHERE lrf.ListingRoomId = @ListingRoomId;
 END
 

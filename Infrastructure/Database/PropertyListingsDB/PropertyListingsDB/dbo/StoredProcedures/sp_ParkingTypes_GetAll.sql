@@ -5,7 +5,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
     SELECT Id, Description
-    FROM ParkingTypes
+    FROM ParkingType
     ORDER BY Description;
 END
 

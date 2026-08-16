@@ -8,7 +8,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
     SELECT Id, Name, SortOrder, IsActive
-    FROM PropertyTypes
+    FROM PropertyType
     WHERE IsActive = 1
     ORDER BY SortOrder ASC;
 END

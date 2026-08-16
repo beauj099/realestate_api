@@ -8,7 +8,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
     SELECT Id, ReferenceNumber, P24Ref, PropertyTypeId, ListingValuationId, ListDate, Status, CreatedAt, UpdatedAt
-    FROM Listings
+    FROM Listing
     WHERE (@Status IS NULL OR Status = @Status)
       AND (@DateFrom IS NULL OR CreatedAt >= @DateFrom)
       AND (@DateTo IS NULL OR CreatedAt <= @DateTo)

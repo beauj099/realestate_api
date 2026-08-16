@@ -17,18 +17,18 @@ BEGIN
 
     -- Generate reference number: LST-YYYY-NNNNN
     SELECT @NextNum = ISNULL(MAX(CAST(SUBSTRING(ReferenceNumber, 10, 5) AS INT)), 0) + 1
-    FROM Listings
+    FROM Listing
     WHERE ReferenceNumber LIKE 'LST-' + @Year + '-%';
 
     SET @RefNum = 'LST-' + @Year + '-' + RIGHT('00000' + CAST(@NextNum AS NVARCHAR(5)), 5);
 
-    INSERT INTO Listings (ReferenceNumber, P24Ref, PropertyTypeId, Status, CreatedAt, UpdatedAt)
+    INSERT INTO Listing (ReferenceNumber, P24Ref, PropertyTypeId, Status, CreatedAt, UpdatedAt)
     VALUES (@RefNum, @P24Ref, @PropertyTypeId, 'draft', GETUTCDATE(), GETUTCDATE());
 
     SET @Id = SCOPE_IDENTITY();
 
     SELECT Id, ReferenceNumber, P24Ref, PropertyTypeId, ListingValuationId, ListDate, Status, CreatedAt, UpdatedAt
-    FROM Listings
+    FROM Listing
     WHERE Id = @Id;
 END
 

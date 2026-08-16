@@ -1,41 +1,27 @@
-using Dapper;
 using RealEstateApi.Application.Interfaces;
 using RealEstateApi.Domain.Models;
 using RealEstateApi.Infrastructure.Data;
-using System.Data;
 
 namespace RealEstateApi.Infrastructure.Repositories;
 
-public class ListingValuationRepository : IListingValuationRepository
+public class ListingValuationRepository : DapperRepository, IListingValuationRepository
 {
-    private readonly DbConnectionFactory _connectionFactory;
-
-    public ListingValuationRepository(DbConnectionFactory connectionFactory)
+    public ListingValuationRepository(DbConnectionFactory connectionFactory) : base(connectionFactory)
     {
-        _connectionFactory = connectionFactory;
     }
 
-    public async Task<ListingValuation?> GetByListingIdAsync(int listingId)
-    {
-        using var connection = _connectionFactory.CreateConnection();
-        return await connection.QueryFirstOrDefaultAsync<ListingValuation>(
-            "sp_ListingValuation_GetByListingId",
-            new { ListingId = listingId },
-            commandType: CommandType.StoredProcedure);
-    }
+    public Task<ListingValuation?> GetByListingIdAsync(int listingId) =>
+        QuerySingleOrDefaultProcAsync<ListingValuation>(
+            "sp_ListingValuation_GetByListingId", new { ListingId = listingId });
 
-    public async Task<ListingValuation> UpsertAsync(int listingId, ListingValuation valuation)
-    {
-        using var connection = _connectionFactory.CreateConnection();
-        return await connection.QueryFirstOrDefaultAsync<ListingValuation>(
+    public Task<ListingValuation> UpsertAsync(int listingId, ListingValuation valuation) =>
+        QuerySingleProcAsync<ListingValuation>(
             "sp_ListingValuation_Upsert",
             new
             {
                 ListingId = listingId,
-                OwnersNetPrice = valuation.OwnersNetPrice,
-                AgentValuation = valuation.AgentValuation,
-                CommissionPercent = valuation.CommissionPercent
-            },
-            commandType: CommandType.StoredProcedure);
-    }
+                valuation.OwnersNetPrice,
+                valuation.AgentValuation,
+                valuation.CommissionPercent
+            });
 }

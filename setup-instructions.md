@@ -18,7 +18,10 @@
 - Either connect a **custom domain** or use the **`r2.dev`** subdomain
 - Copy the **public URL** (e.g., `https://pub-xxxxxxxxxxxxxxxxxxxxxxxxxxxxx.r2.dev`)
 
-## 4. Fill in `appsettings.json`
+## 4. Provide the R2 values as local secrets
+
+> ⚠️ **Do not put real secrets in `appsettings.json`** — it is committed to git. Use
+> `appsettings.Development.json` (now git-ignored) or user-secrets instead.
 
 ```json
 "R2": {
@@ -34,3 +37,21 @@
 
 > **Tip for `PublicUrl`:** Use the full URL with the bucket name as path if using `r2.dev`:
 > `https://pub-<hash>.r2.dev` (not the `cf-r2.com` endpoint)
+
+# JWT Secret Setup (required)
+
+The API **will not start** until a secure JWT signing secret is configured (at least 32
+bytes, and not the old placeholder). Keep it out of source control — set it via user-secrets
+in development:
+
+```bash
+dotnet user-secrets set "Jwt:Secret" "$(openssl rand -base64 48)"
+```
+
+Or via an environment variable (any host / container):
+
+```bash
+export Jwt__Secret="<64+ random characters>"
+```
+
+The committed `appsettings.json` intentionally ships an **empty** `Jwt:Secret`.

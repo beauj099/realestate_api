@@ -12,7 +12,7 @@ public class ListingService : IListingService
     private readonly IListingBuildingInfoRepository _buildingInfoRepo;
     private readonly IListingValuationRepository _valuationRepo;
     private readonly IPropertyRunningCostsRepository _runningCostsRepo;
-    private readonly IListingRoomRepository _roomRepo;
+    private readonly IRoomAssembler _roomAssembler;
     private readonly IListingParkingRepository _parkingRepo;
     private readonly IContactRepository _contactRepo;
     private readonly IMapper _mapper;
@@ -23,7 +23,7 @@ public class ListingService : IListingService
         IListingBuildingInfoRepository buildingInfoRepo,
         IListingValuationRepository valuationRepo,
         IPropertyRunningCostsRepository runningCostsRepo,
-        IListingRoomRepository roomRepo,
+        IRoomAssembler roomAssembler,
         IListingParkingRepository parkingRepo,
         IContactRepository contactRepo,
         IMapper mapper)
@@ -33,7 +33,7 @@ public class ListingService : IListingService
         _buildingInfoRepo = buildingInfoRepo;
         _valuationRepo = valuationRepo;
         _runningCostsRepo = runningCostsRepo;
-        _roomRepo = roomRepo;
+        _roomAssembler = roomAssembler;
         _parkingRepo = parkingRepo;
         _contactRepo = contactRepo;
         _mapper = mapper;
@@ -140,7 +140,7 @@ public class ListingService : IListingService
         var buildingInfoTask = _buildingInfoRepo.GetByListingIdAsync(id);
         var valuationTask = _valuationRepo.GetByListingIdAsync(id);
         var runningCostsTask = _runningCostsRepo.GetByListingIdAsync(id);
-        var roomsTask = BuildRoomDtosAsync(id);
+        var roomsTask = _roomAssembler.GetRoomDtosAsync(id);
         var parkingTask = _parkingRepo.GetByListingIdAsync(id);
         var contactsTask = _contactRepo.GetByListingIdAsync(id);
 
@@ -158,30 +158,5 @@ public class ListingService : IListingService
             parkingTask.Result.Select(p => _mapper.Map<ParkingDto>(p)).ToList(),
             contactsTask.Result.Select(c => _mapper.Map<ContactDto>(c)).ToList()
         );
-    }
-
-    private async Task<List<RoomDto>> BuildRoomDtosAsync(int listingId)
-    {
-        var rooms = await _roomRepo.GetByListingIdAsync(listingId);
-        var roomDtos = new List<RoomDto>();
-
-        foreach (var room in rooms)
-        {
-            var conditionTask = _roomRepo.GetConditionByRoomIdAsync(room.Id);
-            var featuresTask = _roomRepo.GetLinkedFeaturesAsync(room.Id);
-            var customFeaturesTask = _roomRepo.GetCustomFeaturesAsync(room.Id);
-
-            await Task.WhenAll(conditionTask, featuresTask, customFeaturesTask);
-
-            roomDtos.Add(new RoomDto(
-                room.Id, room.ListingId, room.Name, room.RoomTypeId,
-                room.RoomTypeOther, room.PhotoUrl, room.CreatedAt, room.UpdatedAt,
-                conditionTask.Result is null ? null : _mapper.Map<RoomConditionDto>(conditionTask.Result),
-                featuresTask.Result.Select(f => _mapper.Map<FeatureDto>(f)).ToList(),
-                customFeaturesTask.Result.Select(cf => _mapper.Map<CustomFeatureDto>(cf)).ToList()
-            ));
-        }
-
-        return roomDtos;
     }
 }

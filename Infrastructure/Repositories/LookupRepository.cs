@@ -1,66 +1,33 @@
-using Dapper;
 using RealEstateApi.Application.Interfaces;
 using RealEstateApi.Domain.Models;
 using RealEstateApi.Infrastructure.Data;
-using System.Data;
 
 namespace RealEstateApi.Infrastructure.Repositories;
 
-public class LookupRepository : ILookupRepository
+public class LookupRepository : DapperRepository, ILookupRepository
 {
-    private readonly DbConnectionFactory _connectionFactory;
-
-    public LookupRepository(DbConnectionFactory connectionFactory)
+    public LookupRepository(DbConnectionFactory connectionFactory) : base(connectionFactory)
     {
-        _connectionFactory = connectionFactory;
     }
 
-    public async Task<IEnumerable<PropertyType>> GetPropertyTypesAsync()
-    {
-        using var connection = _connectionFactory.CreateConnection();
-        return await connection.QueryAsync<PropertyType>("sp_PropertyTypes_GetAll",
-            commandType: CommandType.StoredProcedure);
-    }
+    public Task<IEnumerable<PropertyType>> GetPropertyTypesAsync() =>
+        QueryProcAsync<PropertyType>("sp_PropertyTypes_GetAll");
 
-    public async Task<IEnumerable<RoomType>> GetRoomTypesAsync()
-    {
-        using var connection = _connectionFactory.CreateConnection();
-        return await connection.QueryAsync<RoomType>("sp_RoomTypes_GetAll",
-            commandType: CommandType.StoredProcedure);
-    }
+    public Task<IEnumerable<RoomType>> GetRoomTypesAsync() =>
+        QueryProcAsync<RoomType>("sp_RoomTypes_GetAll");
 
-    public async Task<IEnumerable<Feature>> GetFeaturesAsync()
-    {
-        using var connection = _connectionFactory.CreateConnection();
-        return await connection.QueryAsync<Feature>("sp_Features_GetAll",
-            commandType: CommandType.StoredProcedure);
-    }
+    public Task<IEnumerable<Feature>> GetFeaturesAsync() =>
+        QueryProcAsync<Feature>("sp_Features_GetAll");
 
-    public async Task<IEnumerable<ConditionCategory>> GetConditionCategoriesAsync()
-    {
-        using var connection = _connectionFactory.CreateConnection();
-        return await connection.QueryAsync<ConditionCategory>("sp_ConditionCategories_GetAll",
-            commandType: CommandType.StoredProcedure);
-    }
+    public Task<IEnumerable<ConditionCategory>> GetConditionCategoriesAsync() =>
+        QueryProcAsync<ConditionCategory>("sp_ConditionCategories_GetAll");
 
-    public async Task<IEnumerable<ParkingType>> GetParkingTypesAsync()
-    {
-        using var connection = _connectionFactory.CreateConnection();
-        return await connection.QueryAsync<ParkingType>("sp_ParkingTypes_GetAll",
-            commandType: CommandType.StoredProcedure);
-    }
+    public Task<IEnumerable<ParkingType>> GetParkingTypesAsync() =>
+        QueryProcAsync<ParkingType>("sp_ParkingTypes_GetAll");
 
-    public async Task<IEnumerable<Facing>> GetFacingAsync()
-    {
-        using var connection = _connectionFactory.CreateConnection();
-        return await connection.QueryAsync<Facing>("sp_Facing_GetAll",
-            commandType: CommandType.StoredProcedure);
-    }
+    public Task<IEnumerable<Facing>> GetFacingAsync() =>
+        QueryProcAsync<Facing>("sp_Facing_GetAll");
 
-    public async Task<IEnumerable<Zoning>> GetZoningAsync()
-    {
-        using var connection = _connectionFactory.CreateConnection();
-        return await connection.QueryAsync<Zoning>("sp_Zoning_GetAll",
-            commandType: CommandType.StoredProcedure);
-    }
+    public Task<IEnumerable<Zoning>> GetZoningAsync() =>
+        QueryProcAsync<Zoning>("sp_Zoning_GetAll");
 }

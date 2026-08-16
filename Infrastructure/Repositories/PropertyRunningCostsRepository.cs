@@ -1,42 +1,28 @@
-using Dapper;
 using RealEstateApi.Application.Interfaces;
 using RealEstateApi.Domain.Models;
 using RealEstateApi.Infrastructure.Data;
-using System.Data;
 
 namespace RealEstateApi.Infrastructure.Repositories;
 
-public class PropertyRunningCostsRepository : IPropertyRunningCostsRepository
+public class PropertyRunningCostsRepository : DapperRepository, IPropertyRunningCostsRepository
 {
-    private readonly DbConnectionFactory _connectionFactory;
-
-    public PropertyRunningCostsRepository(DbConnectionFactory connectionFactory)
+    public PropertyRunningCostsRepository(DbConnectionFactory connectionFactory) : base(connectionFactory)
     {
-        _connectionFactory = connectionFactory;
     }
 
-    public async Task<PropertyRunningCosts?> GetByListingIdAsync(int listingId)
-    {
-        using var connection = _connectionFactory.CreateConnection();
-        return await connection.QueryFirstOrDefaultAsync<PropertyRunningCosts>(
-            "sp_PropertyRunningCosts_GetByListingId",
-            new { ListingId = listingId },
-            commandType: CommandType.StoredProcedure);
-    }
+    public Task<PropertyRunningCosts?> GetByListingIdAsync(int listingId) =>
+        QuerySingleOrDefaultProcAsync<PropertyRunningCosts>(
+            "sp_PropertyRunningCosts_GetByListingId", new { ListingId = listingId });
 
-    public async Task<PropertyRunningCosts> UpsertAsync(PropertyRunningCosts costs)
-    {
-        using var connection = _connectionFactory.CreateConnection();
-        return await connection.QueryFirstOrDefaultAsync<PropertyRunningCosts>(
+    public Task<PropertyRunningCosts> UpsertAsync(PropertyRunningCosts costs) =>
+        QuerySingleProcAsync<PropertyRunningCosts>(
             "sp_PropertyRunningCosts_Upsert",
             new
             {
-                ListingId = costs.ListingId,
-                MonthlyLevy = costs.MonthlyLevy,
-                MonthlyRates = costs.MonthlyRates,
-                Electricity = costs.Electricity,
-                Water = costs.Water
-            },
-            commandType: CommandType.StoredProcedure);
-    }
+                costs.ListingId,
+                costs.MonthlyLevy,
+                costs.MonthlyRates,
+                costs.Electricity,
+                costs.Water
+            });
 }

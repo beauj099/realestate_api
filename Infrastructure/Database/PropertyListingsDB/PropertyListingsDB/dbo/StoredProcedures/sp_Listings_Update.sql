@@ -8,7 +8,7 @@ CREATE   PROCEDURE sp_Listings_Update
 AS
 BEGIN
     SET NOCOUNT ON;
-    UPDATE Listings
+    UPDATE Listing
     SET Status = COALESCE(@Status, Status),
         P24Ref = COALESCE(@P24Ref, P24Ref),
         PropertyTypeId = COALESCE(@PropertyTypeId, PropertyTypeId),
@@ -16,7 +16,7 @@ BEGIN
     WHERE Id = @Id;
 
     SELECT Id, ReferenceNumber, P24Ref, PropertyTypeId, ListingValuationId, ListDate, Status, CreatedAt, UpdatedAt
-    FROM Listings
+    FROM Listing
     WHERE Id = @Id;
 END
 
