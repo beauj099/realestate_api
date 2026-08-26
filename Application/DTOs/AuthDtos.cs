@@ -7,3 +7,5 @@ public record LoginResponse(string Token, DateTime ExpiresAt, string DisplayName
 public record RefreshTokenRequest(string RefreshToken);
 
 public record RefreshTokenResponse(string Token, DateTime ExpiresAt, string RefreshToken);
+
+public record RegisterRequest(string Username, string Password, string DisplayName);

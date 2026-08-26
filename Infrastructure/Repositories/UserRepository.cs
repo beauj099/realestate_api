@@ -30,4 +30,24 @@ public class UserRepository
             new { Id = id }, cancellationToken: cancellationToken);
         return await conn.QueryFirstOrDefaultAsync<User>(command);
     }
+
+    public async Task<User> CreateAsync(User user, CancellationToken cancellationToken = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        var command = new CommandDefinition(
+            @"INSERT INTO Users (Username, PasswordHash, DisplayName, Role, IsActive, CreatedAt)
+              OUTPUT INSERTED.Id, INSERTED.Username, INSERTED.PasswordHash, INSERTED.DisplayName, INSERTED.Role, INSERTED.IsActive, INSERTED.CreatedAt
+              VALUES (@Username, @PasswordHash, @DisplayName, @Role, @IsActive, @CreatedAt)",
+            new
+            {
+                user.Username,
+                user.PasswordHash,
+                user.DisplayName,
+                user.Role,
+                user.IsActive,
+                user.CreatedAt
+            },
+            cancellationToken: cancellationToken);
+        return await connection.QuerySingleAsync<User>(command);
+    }
 }

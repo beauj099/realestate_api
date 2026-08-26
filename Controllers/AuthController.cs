@@ -34,4 +34,14 @@ public class AuthController : ControllerBase
 
         return Ok(result);
     }
+
+    [HttpPost("register")]
+    public async Task<IActionResult> Register([FromBody] RegisterRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _authService.RegisterAsync(request, cancellationToken);
+        if (result is null)
+            return Conflict(new { message = "Username already taken" });
+
+        return Ok(result);
+    }
 }
