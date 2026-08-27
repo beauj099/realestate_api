@@ -1,13 +1,13 @@
 namespace RealEstateApi.Application.DTOs;
 
-public record CreateListingRequest(int PropertyTypeId, string? P24Ref);
+public record CreateListingRequest(int? PropertyTypeId, string? P24Ref);
 public record UpdateListingRequest(string? Status, string? P24Ref, int? PropertyTypeId);
 
 public record ListingSummaryDto(
     int Id,
     string ReferenceNumber,
     string? P24Ref,
-    int PropertyTypeId,
+    int? PropertyTypeId,
     int? ListingValuationId,
     DateTime? ListDate,
     string Status,
@@ -19,7 +19,7 @@ public record ListingResponse(
     int Id,
     string ReferenceNumber,
     string? P24Ref,
-    int PropertyTypeId,
+    int? PropertyTypeId,
     int? ListingValuationId,
     DateTime? ListDate,
     string Status,

@@ -1,3 +1,4 @@
+using System.Data;
 using Dapper;
 using RealEstateApi.Domain.Models;
 using RealEstateApi.Infrastructure.Data;
@@ -34,11 +35,18 @@ public class ListingRepository
         return await connection.QueryAsync<Listing>(command);
     }
 
-    public async Task<Listing> CreateAsync(int propertyTypeId, string? p24Ref, CancellationToken cancellationToken = default)
+    public async Task<Listing> CreateAsync(int? propertyTypeId, string? p24Ref, CancellationToken cancellationToken = default)
     {
         using var connection = _connectionFactory.CreateConnection();
         connection.Open();
         using var transaction = connection.BeginTransaction();
+
+        // Resolve only if a value was supplied; null means user hasn't chosen yet.
+        int? resolvedPropertyTypeId = null;
+        if (propertyTypeId.HasValue)
+        {
+            resolvedPropertyTypeId = await ResolvePropertyTypeIdAsync(connection, transaction, propertyTypeId.Value, cancellationToken);
+        }
 
         var lockCommand = new CommandDefinition(
             "EXEC sp_getapplock @Resource = 'listing-reference-generator', @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 10000;",
@@ -66,13 +74,34 @@ public class ListingRepository
             "INSERT INTO Listings (ReferenceNumber, P24Ref, PropertyTypeId, Status, CreatedAt, UpdatedAt) " +
             "OUTPUT INSERTED.Id, INSERTED.ReferenceNumber, INSERTED.P24Ref, INSERTED.PropertyTypeId, INSERTED.ListingValuationId, INSERTED.ListDate, INSERTED.Status, INSERTED.CreatedAt, INSERTED.UpdatedAt " +
             "VALUES (@ReferenceNumber, @P24Ref, @PropertyTypeId, @Status, GETUTCDATE(), GETUTCDATE())",
-            new { ReferenceNumber = referenceNumber, P24Ref = p24Ref, PropertyTypeId = propertyTypeId, Status = ListingStatus.Incomplete },
+            new { ReferenceNumber = referenceNumber, P24Ref = p24Ref, PropertyTypeId = resolvedPropertyTypeId, Status = ListingStatus.Incomplete },
             transaction: transaction,
             cancellationToken: cancellationToken);
         var listing = await connection.QueryFirstOrDefaultAsync<Listing>(insertCommand);
 
         transaction.Commit();
         return listing!;
+    }
+
+    private static async Task<int> ResolvePropertyTypeIdAsync(IDbConnection connection, IDbTransaction transaction, int requestedId, CancellationToken cancellationToken)
+    {
+        var existsCommand = new CommandDefinition(
+            "SELECT 1 FROM PropertyType WHERE Id = @Id AND IsActive = 1",
+            new { Id = requestedId },
+            transaction: transaction,
+            cancellationToken: cancellationToken);
+        var exists = await connection.ExecuteScalarAsync<int?>(existsCommand);
+        if (exists != null) return requestedId;
+
+        var fallbackCommand = new CommandDefinition(
+            "SELECT TOP 1 Id FROM PropertyType WHERE IsActive = 1 ORDER BY SortOrder ASC, Id ASC",
+            transaction: transaction,
+            cancellationToken: cancellationToken);
+        var fallback = await connection.ExecuteScalarAsync<int?>(fallbackCommand);
+        if (fallback != null) return fallback.Value;
+
+        throw new KeyNotFoundException(
+            $"Invalid PropertyTypeId {requestedId} and no active PropertyTypes exist. Seed the PropertyType table.");
     }
 
     public async Task<Listing?> UpdateAsync(int id, string? status, string? p24Ref, int? propertyTypeId, CancellationToken cancellationToken = default)

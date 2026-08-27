@@ -44,13 +44,13 @@ public class ExceptionHandlingMiddleware
         }
         catch (SqlException ex) when (ex.Number == 547)
         {
-            _logger.LogWarning(ex, "Foreign key constraint violation");
+            _logger.LogWarning(ex, "Foreign key constraint violation: {Message}", ex.Message);
             context.Response.StatusCode = StatusCodes.Status400BadRequest;
             await context.Response.WriteAsJsonAsync(new ProblemDetails
             {
                 Status = StatusCodes.Status400BadRequest,
                 Title = "Bad Request",
-                Detail = "The operation violates a data integrity constraint"
+                Detail = $"The operation violates a data integrity constraint: {ex.Message}"
             });
         }
         catch (Exception ex)
