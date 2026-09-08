@@ -8,4 +8,12 @@ public record RefreshTokenRequest(string RefreshToken);
 
 public record RefreshTokenResponse(string Token, DateTime ExpiresAt, string RefreshToken);
 
-public record RegisterRequest(string Username, string Password, string DisplayName);
+public record RegisterRequest(
+    string FullName,
+    string Email,
+    string Mobile,
+    string AgencyName,
+    string AgencyRegistrationNumber,
+    string LicenceNumber,
+    string Password
+);

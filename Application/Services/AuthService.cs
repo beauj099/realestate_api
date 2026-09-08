@@ -132,15 +132,38 @@ public class AuthService
 
     public async Task<LoginResponse?> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken = default)
     {
-        var existing = await _userRepository.GetByUsernameAsync(request.Username, cancellationToken);
-        if (existing is not null)
+        // Basic required validation (also enforced at controller, but double-checked here)
+        if (string.IsNullOrWhiteSpace(request.FullName) ||
+            string.IsNullOrWhiteSpace(request.Email) ||
+            string.IsNullOrWhiteSpace(request.Mobile) ||
+            string.IsNullOrWhiteSpace(request.AgencyName) ||
+            string.IsNullOrWhiteSpace(request.AgencyRegistrationNumber) ||
+            string.IsNullOrWhiteSpace(request.LicenceNumber) ||
+            string.IsNullOrWhiteSpace(request.Password))
+            return null;
+
+        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+
+        var existingByEmail = await _userRepository.GetByEmailAsync(normalizedEmail, cancellationToken);
+        if (existingByEmail is not null)
+            return null;
+
+        // Also block duplicate Username (email stored as username)
+        var existingByUsername = await _userRepository.GetByUsernameAsync(normalizedEmail, cancellationToken);
+        if (existingByUsername is not null)
             return null;
 
         var user = new User
         {
-            Username = request.Username,
+            Username = normalizedEmail,
+            Email = normalizedEmail,
+            FullName = request.FullName.Trim(),
+            DisplayName = request.FullName.Trim(),
+            Mobile = request.Mobile.Trim(),
+            AgencyName = request.AgencyName.Trim(),
+            AgencyRegistrationNumber = request.AgencyRegistrationNumber.Trim(),
+            LicenceNumber = request.LicenceNumber.Trim(),
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
-            DisplayName = request.DisplayName,
             Role = "Agent",
             IsActive = true,
             CreatedAt = DateTime.UtcNow
