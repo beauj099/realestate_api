@@ -53,10 +53,6 @@ public class MappingProfile : Profile
 
         CreateMap<AddContactRequest, Contact>().ReverseMap();
 
-        CreateMap<UpdateRoomRequest, ListingRoom>()
-            .ForMember(dest => dest.Name, opt => opt.MapFrom(src => src.Name ?? string.Empty))
-            .ForMember(dest => dest.RoomTypeId, opt => opt.MapFrom(src => src.RoomTypeId ?? 0));
-
         CreateMap<UpdateContactRequest, Contact>().ReverseMap();
     }
 }
