@@ -1,7 +1,9 @@
 using AutoMapper;
+using Microsoft.Extensions.Options;
 using RealEstateApi.Application.DTOs;
 using RealEstateApi.Domain.Models;
 using RealEstateApi.Infrastructure.Repositories;
+using RealEstateApi.Infrastructure.Services;
 
 namespace RealEstateApi.Application.Services;
 
@@ -16,6 +18,9 @@ public class ListingService
     private readonly ListingParkingRepository _parkingRepo;
     private readonly ContactRepository _contactRepo;
     private readonly ListingOutdoorFeatureRepository _outdoorFeatureRepo;
+    private readonly ListingPhotoRepository _photoRepo;
+    private readonly R2ImageService _imageService;
+    private readonly IOptions<R2Options> _r2Options;
     private readonly IMapper _mapper;
 
     public ListingService(
@@ -28,6 +33,9 @@ public class ListingService
         ListingParkingRepository parkingRepo,
         ContactRepository contactRepo,
         ListingOutdoorFeatureRepository outdoorFeatureRepo,
+        ListingPhotoRepository photoRepo,
+        R2ImageService imageService,
+        IOptions<R2Options> r2Options,
         IMapper mapper)
     {
         _listingRepo = listingRepo;
@@ -39,12 +47,25 @@ public class ListingService
         _parkingRepo = parkingRepo;
         _contactRepo = contactRepo;
         _outdoorFeatureRepo = outdoorFeatureRepo;
+        _photoRepo = photoRepo;
+        _imageService = imageService;
+        _r2Options = r2Options;
         _mapper = mapper;
+    }
+
+    public async Task AssertOwnedAsync(int listingId, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
+    {
+        await _listingRepo.AssertOwnedAsync(listingId, userId, isAdmin, cancellationToken);
     }
 
     public async Task<ListingResponse> CreateAsync(CreateListingRequest request, CancellationToken cancellationToken = default)
     {
-        var listing = await _listingRepo.CreateAsync(request.PropertyTypeId, request.P24Ref, cancellationToken);
+        return await CreateAsync(request, 0, false, cancellationToken);
+    }
+
+    public async Task<ListingResponse> CreateAsync(CreateListingRequest request, int userId, bool isAdmin, CancellationToken cancellationToken = default)
+    {
+        var listing = await _listingRepo.CreateAsync(request.PropertyTypeId, request.P24Ref, userId, cancellationToken);
         return await BuildFullResponseAsync(listing, cancellationToken);
     }
 
@@ -55,10 +76,22 @@ public class ListingService
         return await BuildFullResponseAsync(listing, cancellationToken);
     }
 
+    public async Task<ListingResponse?> GetByIdAsync(int id, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
+    {
+        var listing = await _listingRepo.GetOwnedByIdAsync(id, userId, isAdmin, cancellationToken);
+        if (listing == null) return null;
+        return await BuildFullResponseAsync(listing, cancellationToken);
+    }
+
     public async Task<IEnumerable<ListingSummaryDto>> GetAllAsync(string? status, DateTime? dateFrom, DateTime? dateTo, CancellationToken cancellationToken = default)
     {
         var listings = await _listingRepo.GetAllAsync(status, dateFrom, dateTo, cancellationToken);
         return _mapper.Map<IEnumerable<ListingSummaryDto>>(listings);
+    }
+
+    public async Task<IEnumerable<ListingSummaryDto>> GetAllAsync(string? status, DateTime? dateFrom, DateTime? dateTo, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
+    {
+        return await _listingRepo.GetSummariesAsync(status, dateFrom, dateTo, userId, isAdmin, cancellationToken);
     }
 
     public async Task<ListingResponse?> UpdateAsync(int id, UpdateListingRequest request, CancellationToken cancellationToken = default)
@@ -68,14 +101,50 @@ public class ListingService
         return await BuildFullResponseAsync(listing, cancellationToken);
     }
 
+    public async Task<ListingResponse?> UpdateAsync(int id, UpdateListingRequest request, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
+    {
+        var listing = await _listingRepo.UpdateAsync(id, request.Status, request.P24Ref, request.PropertyTypeId, userId, isAdmin, cancellationToken);
+        if (listing == null) return null;
+        return await BuildFullResponseAsync(listing, cancellationToken);
+    }
+
     public async Task DeleteAsync(int id, CancellationToken cancellationToken = default)
     {
         await _listingRepo.DeleteAsync(id, cancellationToken);
     }
 
+    public async Task DeleteAsync(int id, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
+    {
+        await AssertOwnedAsync(id, userId, isAdmin, cancellationToken);
+        // Best-effort R2 cleanup so the bucket does not grow forever;
+        // DB rows are removed by cascade even if this fails.
+        try
+        {
+            var photos = await _photoRepo.GetByListingIdAsync(id, cancellationToken);
+            var prefix = _r2Options.Value.PublicUrl.TrimEnd('/') + "/";
+            foreach (var photo in photos)
+            {
+                var key = photo.Url.StartsWith(prefix) ? photo.Url[prefix.Length..] : photo.Url;
+                await _imageService.DeleteAsync(key);
+            }
+        }
+        catch
+        {
+            // Fall through to DB delete regardless.
+        }
+        await _listingRepo.DeleteAsync(id, userId, isAdmin, cancellationToken);
+    }
+
     public async Task<ListingResponse?> SubmitAsync(int id, CancellationToken cancellationToken = default)
     {
         var listing = await _listingRepo.SubmitAsync(id, cancellationToken);
+        if (listing == null) return null;
+        return await BuildFullResponseAsync(listing, cancellationToken);
+    }
+
+    public async Task<ListingResponse?> SubmitAsync(int id, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
+    {
+        var listing = await _listingRepo.SubmitAsync(id, userId, isAdmin, cancellationToken);
         if (listing == null) return null;
         return await BuildFullResponseAsync(listing, cancellationToken);
     }

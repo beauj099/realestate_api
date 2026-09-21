@@ -26,6 +26,7 @@ public class ExceptionHandlingMiddleware
             context.Response.StatusCode = StatusCodes.Status404NotFound;
             await context.Response.WriteAsJsonAsync(new ProblemDetails
             {
+                Type = "https://httpstatuses.io/404",
                 Status = StatusCodes.Status404NotFound,
                 Title = "Not Found",
                 Detail = ex.Message
@@ -37,6 +38,7 @@ public class ExceptionHandlingMiddleware
             context.Response.StatusCode = StatusCodes.Status409Conflict;
             await context.Response.WriteAsJsonAsync(new ProblemDetails
             {
+                Type = "https://httpstatuses.io/409",
                 Status = StatusCodes.Status409Conflict,
                 Title = "Conflict",
                 Detail = "The resource already exists or violates a uniqueness constraint"
@@ -44,13 +46,14 @@ public class ExceptionHandlingMiddleware
         }
         catch (SqlException ex) when (ex.Number == 547)
         {
-            _logger.LogWarning(ex, "Foreign key constraint violation");
+            _logger.LogWarning(ex, "Foreign key constraint violation: {Message}", ex.Message);
             context.Response.StatusCode = StatusCodes.Status400BadRequest;
             await context.Response.WriteAsJsonAsync(new ProblemDetails
             {
+                Type = "https://httpstatuses.io/400",
                 Status = StatusCodes.Status400BadRequest,
                 Title = "Bad Request",
-                Detail = "The operation violates a data integrity constraint"
+                Detail = $"The operation violates a data integrity constraint: {ex.Message}"
             });
         }
         catch (Exception ex)
@@ -59,6 +62,7 @@ public class ExceptionHandlingMiddleware
             context.Response.StatusCode = StatusCodes.Status500InternalServerError;
             await context.Response.WriteAsJsonAsync(new ProblemDetails
             {
+                Type = "https://httpstatuses.io/500",
                 Status = StatusCodes.Status500InternalServerError,
                 Title = "An unexpected error occurred"
             });

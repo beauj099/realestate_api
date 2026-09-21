@@ -18,19 +18,17 @@ public class ListingParkingService
         _mapper = mapper;
     }
 
-    public async Task<IEnumerable<ParkingDto>> GetParkingAsync(int listingId, CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<ParkingDto>> GetParkingAsync(int listingId, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
     {
-        var listing = await _listingRepo.GetByIdAsync(listingId, cancellationToken);
-        if (listing == null) throw new KeyNotFoundException($"Listing {listingId} not found");
+        await _listingRepo.AssertOwnedAsync(listingId, userId, isAdmin, cancellationToken);
 
         var parking = await _parkingRepo.GetByListingIdAsync(listingId, cancellationToken);
         return _mapper.Map<List<ParkingDto>>(parking);
     }
 
-    public async Task<ParkingDto> AddParkingAsync(int listingId, AddParkingRequest request, CancellationToken cancellationToken = default)
+    public async Task<ParkingDto> AddParkingAsync(int listingId, AddParkingRequest request, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
     {
-        var listing = await _listingRepo.GetByIdAsync(listingId, cancellationToken);
-        if (listing == null) throw new KeyNotFoundException($"Listing {listingId} not found");
+        await _listingRepo.AssertOwnedAsync(listingId, userId, isAdmin, cancellationToken);
 
         var parking = _mapper.Map<ListingParking>(request);
         parking.ListingId = listingId;
@@ -39,10 +37,9 @@ public class ListingParkingService
         return _mapper.Map<ParkingDto>(result);
     }
 
-    public async Task<ParkingDto?> UpdateParkingAsync(int listingId, int parkingId, UpdateParkingRequest request, CancellationToken cancellationToken = default)
+    public async Task<ParkingDto?> UpdateParkingAsync(int listingId, int parkingId, UpdateParkingRequest request, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
     {
-        var listing = await _listingRepo.GetByIdAsync(listingId, cancellationToken);
-        if (listing == null) throw new KeyNotFoundException($"Listing {listingId} not found");
+        await _listingRepo.AssertOwnedAsync(listingId, userId, isAdmin, cancellationToken);
 
         await EnsureParkingBelongsToListingAsync(listingId, parkingId, cancellationToken);
 
@@ -52,10 +49,9 @@ public class ListingParkingService
         return _mapper.Map<ParkingDto>(result);
     }
 
-    public async Task DeleteParkingAsync(int listingId, int parkingId, CancellationToken cancellationToken = default)
+    public async Task DeleteParkingAsync(int listingId, int parkingId, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
     {
-        var listing = await _listingRepo.GetByIdAsync(listingId, cancellationToken);
-        if (listing == null) throw new KeyNotFoundException($"Listing {listingId} not found");
+        await _listingRepo.AssertOwnedAsync(listingId, userId, isAdmin, cancellationToken);
 
         await EnsureParkingBelongsToListingAsync(listingId, parkingId, cancellationToken);
 

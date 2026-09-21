@@ -29,6 +29,7 @@ public static class DependencyInjection
         services.AddScoped<ListingRoomRepository>();
         services.AddScoped<ListingParkingRepository>();
         services.AddScoped<ContactRepository>();
+        services.AddScoped<ListingPhotoRepository>();
         services.AddScoped<ListingOutdoorFeatureRepository>();
         services.AddScoped<UserRepository>();
         services.AddScoped<RefreshTokenRepository>();
@@ -43,8 +44,10 @@ public static class DependencyInjection
         services.AddScoped<ListingRoomService>();
         services.AddScoped<ListingParkingService>();
         services.AddScoped<ListingContactService>();
+        services.AddScoped<ListingPhotoService>();
         services.AddScoped<ListingOutdoorFeatureService>();
         services.AddScoped<AuthService>();
+        services.AddScoped<AgentProfileService>();
 
         return services;
     }

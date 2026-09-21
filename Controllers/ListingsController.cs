@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RealEstateApi.Application.DTOs;
@@ -17,24 +18,34 @@ public class ListingsController : ControllerBase
         _listingService = listingService;
     }
 
+    private int? CurrentUserId()
+    {
+        var id = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return int.TryParse(id, out var parsed) ? parsed : null;
+    }
+
+    private bool IsAdmin() => User.IsInRole("Admin");
+
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateListingRequest request, CancellationToken cancellationToken)
     {
-        var result = await _listingService.CreateAsync(request, cancellationToken);
+        var userId = CurrentUserId();
+        if (userId is null && !IsAdmin()) return Unauthorized();
+        var result = await _listingService.CreateAsync(request, userId ?? 0, IsAdmin(), cancellationToken);
         return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
     }
 
     [HttpGet]
     public async Task<IActionResult> GetAll([FromQuery] string? status, [FromQuery] DateTime? dateFrom, [FromQuery] DateTime? dateTo, CancellationToken cancellationToken)
     {
-        var result = await _listingService.GetAllAsync(status, dateFrom, dateTo, cancellationToken);
+        var result = await _listingService.GetAllAsync(status, dateFrom, dateTo, CurrentUserId(), IsAdmin(), cancellationToken);
         return Ok(result);
     }
 
     [HttpGet("{id}")]
     public async Task<IActionResult> GetById(int id, CancellationToken cancellationToken)
     {
-        var result = await _listingService.GetByIdAsync(id, cancellationToken);
+        var result = await _listingService.GetByIdAsync(id, CurrentUserId(), IsAdmin(), cancellationToken);
         if (result == null) return NotFound();
         return Ok(result);
     }
@@ -42,7 +53,7 @@ public class ListingsController : ControllerBase
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateListingRequest request, CancellationToken cancellationToken)
     {
-        var result = await _listingService.UpdateAsync(id, request, cancellationToken);
+        var result = await _listingService.UpdateAsync(id, request, CurrentUserId(), IsAdmin(), cancellationToken);
         if (result == null) return NotFound();
         return Ok(result);
     }
@@ -50,14 +61,14 @@ public class ListingsController : ControllerBase
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
     {
-        await _listingService.DeleteAsync(id, cancellationToken);
+        await _listingService.DeleteAsync(id, CurrentUserId(), IsAdmin(), cancellationToken);
         return NoContent();
     }
 
     [HttpPut("{id}/submit")]
     public async Task<IActionResult> Submit(int id, CancellationToken cancellationToken)
     {
-        var result = await _listingService.SubmitAsync(id, cancellationToken);
+        var result = await _listingService.SubmitAsync(id, CurrentUserId(), IsAdmin(), cancellationToken);
         if (result == null) return NotFound();
         return Ok(result);
     }
@@ -66,6 +77,8 @@ public class ListingsController : ControllerBase
     [HttpGet("{id}/address")]
     public async Task<IActionResult> GetAddress(int id, CancellationToken cancellationToken)
     {
+        try { await _listingService.AssertOwnedAsync(id, CurrentUserId(), IsAdmin(), cancellationToken); }
+        catch (KeyNotFoundException) { return NotFound(); }
         var result = await _listingService.GetAddressAsync(id, cancellationToken);
         if (result == null) return NotFound();
         return Ok(result);
@@ -74,6 +87,8 @@ public class ListingsController : ControllerBase
     [HttpPut("{id}/address")]
     public async Task<IActionResult> UpsertAddress(int id, [FromBody] UpsertAddressRequest request, CancellationToken cancellationToken)
     {
+        try { await _listingService.AssertOwnedAsync(id, CurrentUserId(), IsAdmin(), cancellationToken); }
+        catch (KeyNotFoundException) { return NotFound(); }
         var result = await _listingService.UpsertAddressAsync(id, request, cancellationToken);
         return Ok(result);
     }
@@ -82,6 +97,8 @@ public class ListingsController : ControllerBase
     [HttpGet("{id}/building-info")]
     public async Task<IActionResult> GetBuildingInfo(int id, CancellationToken cancellationToken)
     {
+        try { await _listingService.AssertOwnedAsync(id, CurrentUserId(), IsAdmin(), cancellationToken); }
+        catch (KeyNotFoundException) { return NotFound(); }
         var result = await _listingService.GetBuildingInfoAsync(id, cancellationToken);
         if (result == null) return NotFound();
         return Ok(result);
@@ -90,6 +107,8 @@ public class ListingsController : ControllerBase
     [HttpPut("{id}/building-info")]
     public async Task<IActionResult> UpsertBuildingInfo(int id, [FromBody] UpsertBuildingInfoRequest request, CancellationToken cancellationToken)
     {
+        try { await _listingService.AssertOwnedAsync(id, CurrentUserId(), IsAdmin(), cancellationToken); }
+        catch (KeyNotFoundException) { return NotFound(); }
         var result = await _listingService.UpsertBuildingInfoAsync(id, request, cancellationToken);
         return Ok(result);
     }
@@ -98,6 +117,8 @@ public class ListingsController : ControllerBase
     [HttpGet("{id}/valuation")]
     public async Task<IActionResult> GetValuation(int id, CancellationToken cancellationToken)
     {
+        try { await _listingService.AssertOwnedAsync(id, CurrentUserId(), IsAdmin(), cancellationToken); }
+        catch (KeyNotFoundException) { return NotFound(); }
         var result = await _listingService.GetValuationAsync(id, cancellationToken);
         if (result == null) return NotFound();
         return Ok(result);
@@ -106,6 +127,8 @@ public class ListingsController : ControllerBase
     [HttpPut("{id}/valuation")]
     public async Task<IActionResult> UpsertValuation(int id, [FromBody] UpsertValuationRequest request, CancellationToken cancellationToken)
     {
+        try { await _listingService.AssertOwnedAsync(id, CurrentUserId(), IsAdmin(), cancellationToken); }
+        catch (KeyNotFoundException) { return NotFound(); }
         var result = await _listingService.UpsertValuationAsync(id, request, cancellationToken);
         return Ok(result);
     }
@@ -114,6 +137,8 @@ public class ListingsController : ControllerBase
     [HttpGet("{id}/running-costs")]
     public async Task<IActionResult> GetRunningCosts(int id, CancellationToken cancellationToken)
     {
+        try { await _listingService.AssertOwnedAsync(id, CurrentUserId(), IsAdmin(), cancellationToken); }
+        catch (KeyNotFoundException) { return NotFound(); }
         var result = await _listingService.GetRunningCostsAsync(id, cancellationToken);
         if (result == null) return NotFound();
         return Ok(result);
@@ -122,6 +147,8 @@ public class ListingsController : ControllerBase
     [HttpPut("{id}/running-costs")]
     public async Task<IActionResult> UpsertRunningCosts(int id, [FromBody] UpsertRunningCostsRequest request, CancellationToken cancellationToken)
     {
+        try { await _listingService.AssertOwnedAsync(id, CurrentUserId(), IsAdmin(), cancellationToken); }
+        catch (KeyNotFoundException) { return NotFound(); }
         var result = await _listingService.UpsertRunningCostsAsync(id, request, cancellationToken);
         return Ok(result);
     }

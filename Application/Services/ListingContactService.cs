@@ -18,19 +18,17 @@ public class ListingContactService
         _mapper = mapper;
     }
 
-    public async Task<IEnumerable<ContactDto>> GetContactsAsync(int listingId, CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<ContactDto>> GetContactsAsync(int listingId, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
     {
-        var listing = await _listingRepo.GetByIdAsync(listingId, cancellationToken);
-        if (listing == null) throw new KeyNotFoundException($"Listing {listingId} not found");
+        await _listingRepo.AssertOwnedAsync(listingId, userId, isAdmin, cancellationToken);
 
         var contacts = await _contactRepo.GetByListingIdAsync(listingId, cancellationToken);
         return _mapper.Map<List<ContactDto>>(contacts);
     }
 
-    public async Task<ContactDto> AddContactAsync(int listingId, AddContactRequest request, CancellationToken cancellationToken = default)
+    public async Task<ContactDto> AddContactAsync(int listingId, AddContactRequest request, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
     {
-        var listing = await _listingRepo.GetByIdAsync(listingId, cancellationToken);
-        if (listing == null) throw new KeyNotFoundException($"Listing {listingId} not found");
+        await _listingRepo.AssertOwnedAsync(listingId, userId, isAdmin, cancellationToken);
 
         var contact = _mapper.Map<Contact>(request);
         contact.ListingId = listingId;
@@ -39,10 +37,9 @@ public class ListingContactService
         return _mapper.Map<ContactDto>(result);
     }
 
-    public async Task<ContactDto?> UpdateContactAsync(int listingId, int contactId, UpdateContactRequest request, CancellationToken cancellationToken = default)
+    public async Task<ContactDto?> UpdateContactAsync(int listingId, int contactId, UpdateContactRequest request, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
     {
-        var listing = await _listingRepo.GetByIdAsync(listingId, cancellationToken);
-        if (listing == null) throw new KeyNotFoundException($"Listing {listingId} not found");
+        await _listingRepo.AssertOwnedAsync(listingId, userId, isAdmin, cancellationToken);
 
         await EnsureContactBelongsToListingAsync(listingId, contactId, cancellationToken);
 
@@ -54,10 +51,9 @@ public class ListingContactService
         return result is null ? null : _mapper.Map<ContactDto>(result);
     }
 
-    public async Task DeleteContactAsync(int listingId, int contactId, CancellationToken cancellationToken = default)
+    public async Task DeleteContactAsync(int listingId, int contactId, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
     {
-        var listing = await _listingRepo.GetByIdAsync(listingId, cancellationToken);
-        if (listing == null) throw new KeyNotFoundException($"Listing {listingId} not found");
+        await _listingRepo.AssertOwnedAsync(listingId, userId, isAdmin, cancellationToken);
 
         await EnsureContactBelongsToListingAsync(listingId, contactId, cancellationToken);
 
