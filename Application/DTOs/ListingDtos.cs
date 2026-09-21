@@ -12,7 +12,14 @@ public record ListingSummaryDto(
     DateTime? ListDate,
     string Status,
     DateTime CreatedAt,
-    DateTime UpdatedAt
+    DateTime UpdatedAt,
+    string? StreetNumber = null,
+    string? Street = null,
+    string? Suburb = null,
+    string? City = null,
+    string? PrimaryOwnerName = null,
+    string? PrimaryPhotoUrl = null,
+    int RoomCount = 0
 );
 
 public record ListingResponse(

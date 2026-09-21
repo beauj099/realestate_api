@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RealEstateApi.Application.DTOs;
@@ -17,17 +18,25 @@ public class ListingRoomsController : ControllerBase
         _roomService = roomService;
     }
 
+    private int? CurrentUserId()
+    {
+        var id = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return int.TryParse(id, out var parsed) ? parsed : null;
+    }
+
+    private bool IsAdmin() => User.IsInRole("Admin");
+
     [HttpGet]
     public async Task<IActionResult> GetAll(int listingId, CancellationToken cancellationToken)
     {
-        var result = await _roomService.GetRoomsAsync(listingId, cancellationToken);
+        var result = await _roomService.GetRoomsAsync(listingId, CurrentUserId(), IsAdmin(), cancellationToken);
         return Ok(result);
     }
 
     [HttpPost]
     public async Task<IActionResult> Create(int listingId, [FromBody] CreateRoomRequest request, CancellationToken cancellationToken)
     {
-        var result = await _roomService.CreateRoomAsync(listingId, request, cancellationToken);
+        var result = await _roomService.CreateRoomAsync(listingId, request, CurrentUserId(), IsAdmin(), cancellationToken);
         return CreatedAtAction(nameof(GetAll), new { listingId }, result);
     }
 
@@ -37,29 +46,43 @@ public class ListingRoomsController : ControllerBase
         var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".webp" };
         var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
         if (!allowedExtensions.Contains(ext))
-            return BadRequest("Only .jpg, .jpeg, .png, .webp files are allowed.");
+            return BadRequest(new ValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["file"] = ["Only .jpg, .jpeg, .png, .webp files are allowed."]
+            })
+            {
+                Type = "https://httpstatuses.io/400",
+                Title = "Validation failed"
+            });
 
         if (file.Length > 5 * 1024 * 1024)
-            return BadRequest("File size must not exceed 5 MB.");
+            return BadRequest(new ValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["file"] = ["File size must not exceed 5 MB."]
+            })
+            {
+                Type = "https://httpstatuses.io/400",
+                Title = "Validation failed"
+            });
 
         var uniqueName = $"{Guid.NewGuid()}{ext}";
 
         await using var stream = file.OpenReadStream();
-        var result = await _roomService.UploadPhotoAsync(listingId, roomId, stream, uniqueName, file.ContentType, cancellationToken);
+        var result = await _roomService.UploadPhotoAsync(listingId, roomId, stream, uniqueName, file.ContentType, CurrentUserId(), IsAdmin(), cancellationToken);
         return Ok(result);
     }
 
     [HttpDelete("{roomId}/photo")]
     public async Task<IActionResult> DeletePhoto(int listingId, int roomId, CancellationToken cancellationToken)
     {
-        await _roomService.DeletePhotoAsync(listingId, roomId, cancellationToken);
+        await _roomService.DeletePhotoAsync(listingId, roomId, CurrentUserId(), IsAdmin(), cancellationToken);
         return NoContent();
     }
 
     [HttpPut("{roomId}")]
     public async Task<IActionResult> Update(int listingId, int roomId, [FromBody] UpdateRoomRequest request, CancellationToken cancellationToken)
     {
-        var result = await _roomService.UpdateRoomAsync(listingId, roomId, request, cancellationToken);
+        var result = await _roomService.UpdateRoomAsync(listingId, roomId, request, CurrentUserId(), IsAdmin(), cancellationToken);
         if (result == null) return NotFound();
         return Ok(result);
     }
@@ -67,7 +90,7 @@ public class ListingRoomsController : ControllerBase
     [HttpDelete("{roomId}")]
     public async Task<IActionResult> Delete(int listingId, int roomId, CancellationToken cancellationToken)
     {
-        await _roomService.DeleteRoomAsync(listingId, roomId, cancellationToken);
+        await _roomService.DeleteRoomAsync(listingId, roomId, CurrentUserId(), IsAdmin(), cancellationToken);
         return NoContent();
     }
 
@@ -75,7 +98,7 @@ public class ListingRoomsController : ControllerBase
     [HttpPut("{roomId}/condition")]
     public async Task<IActionResult> UpsertCondition(int listingId, int roomId, [FromBody] UpsertRoomConditionRequest request, CancellationToken cancellationToken)
     {
-        var result = await _roomService.UpsertConditionAsync(listingId, roomId, request, cancellationToken);
+        var result = await _roomService.UpsertConditionAsync(listingId, roomId, request, CurrentUserId(), IsAdmin(), cancellationToken);
         return Ok(result);
     }
 
@@ -83,21 +106,21 @@ public class ListingRoomsController : ControllerBase
     [HttpGet("{roomId}/features")]
     public async Task<IActionResult> GetFeatures(int listingId, int roomId, CancellationToken cancellationToken)
     {
-        var result = await _roomService.GetRoomFeaturesAsync(listingId, roomId, cancellationToken);
+        var result = await _roomService.GetRoomFeaturesAsync(listingId, roomId, CurrentUserId(), IsAdmin(), cancellationToken);
         return Ok(result);
     }
 
     [HttpPost("{roomId}/features")]
     public async Task<IActionResult> LinkFeature(int listingId, int roomId, [FromBody] LinkFeatureRequest request, CancellationToken cancellationToken)
     {
-        var result = await _roomService.LinkFeatureAsync(listingId, roomId, request.FeatureId, cancellationToken);
+        var result = await _roomService.LinkFeatureAsync(listingId, roomId, request.FeatureId, CurrentUserId(), IsAdmin(), cancellationToken);
         return StatusCode(201, result);
     }
 
     [HttpDelete("{roomId}/features/{featureId}")]
     public async Task<IActionResult> UnlinkFeature(int listingId, int roomId, int featureId, CancellationToken cancellationToken)
     {
-        await _roomService.UnlinkFeatureAsync(listingId, roomId, featureId, cancellationToken);
+        await _roomService.UnlinkFeatureAsync(listingId, roomId, featureId, CurrentUserId(), IsAdmin(), cancellationToken);
         return NoContent();
     }
 
@@ -105,21 +128,21 @@ public class ListingRoomsController : ControllerBase
     [HttpGet("{roomId}/custom-features")]
     public async Task<IActionResult> GetCustomFeatures(int listingId, int roomId, CancellationToken cancellationToken)
     {
-        var result = await _roomService.GetRoomCustomFeaturesAsync(listingId, roomId, cancellationToken);
+        var result = await _roomService.GetRoomCustomFeaturesAsync(listingId, roomId, CurrentUserId(), IsAdmin(), cancellationToken);
         return Ok(result);
     }
 
     [HttpPost("{roomId}/custom-features")]
     public async Task<IActionResult> AddCustomFeature(int listingId, int roomId, [FromBody] AddCustomFeatureRequest request, CancellationToken cancellationToken)
     {
-        var result = await _roomService.AddCustomFeatureAsync(listingId, roomId, request, cancellationToken);
+        var result = await _roomService.AddCustomFeatureAsync(listingId, roomId, request, CurrentUserId(), IsAdmin(), cancellationToken);
         return CreatedAtAction(nameof(GetAll), new { listingId }, result);
     }
 
     [HttpDelete("{roomId}/custom-features/{customFeatureId}")]
     public async Task<IActionResult> DeleteCustomFeature(int listingId, int roomId, int customFeatureId, CancellationToken cancellationToken)
     {
-        await _roomService.DeleteCustomFeatureAsync(listingId, roomId, customFeatureId, cancellationToken);
+        await _roomService.DeleteCustomFeatureAsync(listingId, roomId, customFeatureId, CurrentUserId(), IsAdmin(), cancellationToken);
         return NoContent();
     }
 }

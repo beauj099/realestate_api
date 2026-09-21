@@ -10,5 +10,6 @@ public class Contact
     public string? MobilePhone { get; set; }
     public string? EmailAddress { get; set; }
     public string? Role { get; set; }
+    public string? OwnerType { get; set; } // 'Person' | 'Business'
     public int ListingId { get; set; }
 }

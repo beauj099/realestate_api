@@ -17,3 +17,21 @@ public record RegisterRequest(
     string LicenceNumber,
     string Password
 );
+
+public record AgentProfileDto(
+    int Id,
+    string DisplayName,
+    string? Email,
+    string? Mobile,
+    string? AgencyName,
+    string? AgencyRegistrationNumber,
+    string? LicenceNumber,
+    string Role);
+
+public record UpdateAgentProfileRequest(
+    string DisplayName,
+    string Email,
+    string Mobile,
+    string? AgencyName,
+    string? AgencyRegistrationNumber,
+    string? LicenceNumber);

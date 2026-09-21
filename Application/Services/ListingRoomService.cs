@@ -29,17 +29,17 @@ public class ListingRoomService
         _mapper = mapper;
     }
 
-    public async Task<IEnumerable<RoomDto>> GetRoomsAsync(int listingId, CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<RoomDto>> GetRoomsAsync(int listingId, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
     {
-        var listing = await _listingRepo.GetByIdAsync(listingId, cancellationToken);
+        var listing = await _listingRepo.GetOwnedByIdAsync(listingId, userId, isAdmin, cancellationToken);
         if (listing == null) throw new KeyNotFoundException($"Listing {listingId} not found");
 
         return await RoomDtoBuilder.BuildAsync(_roomRepo, _mapper, listingId, cancellationToken);
     }
 
-    public async Task<RoomDto> CreateRoomAsync(int listingId, CreateRoomRequest request, CancellationToken cancellationToken = default)
+    public async Task<RoomDto> CreateRoomAsync(int listingId, CreateRoomRequest request, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
     {
-        var listing = await _listingRepo.GetByIdAsync(listingId, cancellationToken);
+        var listing = await _listingRepo.GetOwnedByIdAsync(listingId, userId, isAdmin, cancellationToken);
         if (listing == null) throw new KeyNotFoundException($"Listing {listingId} not found");
 
         var room = _mapper.Map<ListingRoom>(request);
@@ -53,9 +53,9 @@ public class ListingRoomService
         );
     }
 
-    public async Task<RoomDto?> UpdateRoomAsync(int listingId, int roomId, UpdateRoomRequest request, CancellationToken cancellationToken = default)
+    public async Task<RoomDto?> UpdateRoomAsync(int listingId, int roomId, UpdateRoomRequest request, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
     {
-        var listing = await _listingRepo.GetByIdAsync(listingId, cancellationToken);
+        var listing = await _listingRepo.GetOwnedByIdAsync(listingId, userId, isAdmin, cancellationToken);
         if (listing == null) throw new KeyNotFoundException($"Listing {listingId} not found");
 
         await GetOwnedRoomAsync(listingId, roomId, cancellationToken);
@@ -81,9 +81,9 @@ public class ListingRoomService
         );
     }
 
-    public async Task DeleteRoomAsync(int listingId, int roomId, CancellationToken cancellationToken = default)
+    public async Task DeleteRoomAsync(int listingId, int roomId, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
     {
-        var listing = await _listingRepo.GetByIdAsync(listingId, cancellationToken);
+        var listing = await _listingRepo.GetOwnedByIdAsync(listingId, userId, isAdmin, cancellationToken);
         if (listing == null) throw new KeyNotFoundException($"Listing {listingId} not found");
 
         var room = await GetOwnedRoomAsync(listingId, roomId, cancellationToken);
@@ -96,9 +96,9 @@ public class ListingRoomService
         await _roomRepo.DeleteAsync(roomId, cancellationToken);
     }
 
-    public async Task<PhotoUploadResponse> UploadPhotoAsync(int listingId, int roomId, Stream fileStream, string fileName, string contentType, CancellationToken cancellationToken = default)
+    public async Task<PhotoUploadResponse> UploadPhotoAsync(int listingId, int roomId, Stream fileStream, string fileName, string contentType, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
     {
-        var listing = await _listingRepo.GetByIdAsync(listingId, cancellationToken);
+        var listing = await _listingRepo.GetOwnedByIdAsync(listingId, userId, isAdmin, cancellationToken);
         if (listing == null) throw new KeyNotFoundException($"Listing {listingId} not found");
 
         var room = await GetOwnedRoomAsync(listingId, roomId, cancellationToken);
@@ -116,9 +116,9 @@ public class ListingRoomService
         return new PhotoUploadResponse(url);
     }
 
-    public async Task DeletePhotoAsync(int listingId, int roomId, CancellationToken cancellationToken = default)
+    public async Task DeletePhotoAsync(int listingId, int roomId, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
     {
-        var listing = await _listingRepo.GetByIdAsync(listingId, cancellationToken);
+        var listing = await _listingRepo.GetOwnedByIdAsync(listingId, userId, isAdmin, cancellationToken);
         if (listing == null) throw new KeyNotFoundException($"Listing {listingId} not found");
 
         var room = await GetOwnedRoomAsync(listingId, roomId, cancellationToken);
@@ -136,9 +136,9 @@ public class ListingRoomService
         return photoUrl.StartsWith(prefix) ? photoUrl[prefix.Length..] : photoUrl;
     }
 
-    public async Task<RoomConditionDto> UpsertConditionAsync(int listingId, int roomId, UpsertRoomConditionRequest request, CancellationToken cancellationToken = default)
+    public async Task<RoomConditionDto> UpsertConditionAsync(int listingId, int roomId, UpsertRoomConditionRequest request, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
     {
-        var listing = await _listingRepo.GetByIdAsync(listingId, cancellationToken);
+        var listing = await _listingRepo.GetOwnedByIdAsync(listingId, userId, isAdmin, cancellationToken);
         if (listing == null) throw new KeyNotFoundException($"Listing {listingId} not found");
 
         await GetOwnedRoomAsync(listingId, roomId, cancellationToken);
@@ -150,9 +150,9 @@ public class ListingRoomService
         return _mapper.Map<RoomConditionDto>(result);
     }
 
-    public async Task<IEnumerable<FeatureDto>> GetRoomFeaturesAsync(int listingId, int roomId, CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<FeatureDto>> GetRoomFeaturesAsync(int listingId, int roomId, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
     {
-        var listing = await _listingRepo.GetByIdAsync(listingId, cancellationToken);
+        var listing = await _listingRepo.GetOwnedByIdAsync(listingId, userId, isAdmin, cancellationToken);
         if (listing == null) throw new KeyNotFoundException($"Listing {listingId} not found");
 
         await GetOwnedRoomAsync(listingId, roomId, cancellationToken);
@@ -161,9 +161,9 @@ public class ListingRoomService
         return _mapper.Map<List<FeatureDto>>(features);
     }
 
-    public async Task<IEnumerable<CustomFeatureDto>> GetRoomCustomFeaturesAsync(int listingId, int roomId, CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<CustomFeatureDto>> GetRoomCustomFeaturesAsync(int listingId, int roomId, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
     {
-        var listing = await _listingRepo.GetByIdAsync(listingId, cancellationToken);
+        var listing = await _listingRepo.GetOwnedByIdAsync(listingId, userId, isAdmin, cancellationToken);
         if (listing == null) throw new KeyNotFoundException($"Listing {listingId} not found");
 
         await GetOwnedRoomAsync(listingId, roomId, cancellationToken);
@@ -172,9 +172,9 @@ public class ListingRoomService
         return _mapper.Map<List<CustomFeatureDto>>(features);
     }
 
-    public async Task<IEnumerable<FeatureDto>> LinkFeatureAsync(int listingId, int roomId, int featureId, CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<FeatureDto>> LinkFeatureAsync(int listingId, int roomId, int featureId, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
     {
-        var listing = await _listingRepo.GetByIdAsync(listingId, cancellationToken);
+        var listing = await _listingRepo.GetOwnedByIdAsync(listingId, userId, isAdmin, cancellationToken);
         if (listing == null) throw new KeyNotFoundException($"Listing {listingId} not found");
 
         await GetOwnedRoomAsync(listingId, roomId, cancellationToken);
@@ -183,9 +183,9 @@ public class ListingRoomService
         return _mapper.Map<List<FeatureDto>>(features);
     }
 
-    public async Task<IEnumerable<FeatureDto>> UnlinkFeatureAsync(int listingId, int roomId, int featureId, CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<FeatureDto>> UnlinkFeatureAsync(int listingId, int roomId, int featureId, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
     {
-        var listing = await _listingRepo.GetByIdAsync(listingId, cancellationToken);
+        var listing = await _listingRepo.GetOwnedByIdAsync(listingId, userId, isAdmin, cancellationToken);
         if (listing == null) throw new KeyNotFoundException($"Listing {listingId} not found");
 
         await GetOwnedRoomAsync(listingId, roomId, cancellationToken);
@@ -194,9 +194,9 @@ public class ListingRoomService
         return _mapper.Map<List<FeatureDto>>(features);
     }
 
-    public async Task<CustomFeatureDto> AddCustomFeatureAsync(int listingId, int roomId, AddCustomFeatureRequest request, CancellationToken cancellationToken = default)
+    public async Task<CustomFeatureDto> AddCustomFeatureAsync(int listingId, int roomId, AddCustomFeatureRequest request, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
     {
-        var listing = await _listingRepo.GetByIdAsync(listingId, cancellationToken);
+        var listing = await _listingRepo.GetOwnedByIdAsync(listingId, userId, isAdmin, cancellationToken);
         if (listing == null) throw new KeyNotFoundException($"Listing {listingId} not found");
 
         await GetOwnedRoomAsync(listingId, roomId, cancellationToken);
@@ -208,9 +208,9 @@ public class ListingRoomService
         return _mapper.Map<CustomFeatureDto>(result);
     }
 
-    public async Task DeleteCustomFeatureAsync(int listingId, int roomId, int customFeatureId, CancellationToken cancellationToken = default)
+    public async Task DeleteCustomFeatureAsync(int listingId, int roomId, int customFeatureId, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
     {
-        var listing = await _listingRepo.GetByIdAsync(listingId, cancellationToken);
+        var listing = await _listingRepo.GetOwnedByIdAsync(listingId, userId, isAdmin, cancellationToken);
         if (listing == null) throw new KeyNotFoundException($"Listing {listingId} not found");
 
         await GetOwnedRoomAsync(listingId, roomId, cancellationToken);

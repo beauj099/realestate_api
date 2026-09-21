@@ -67,4 +67,17 @@ public class UserRepository
             cancellationToken: cancellationToken);
         return await connection.QuerySingleAsync<User>(command);
     }
+
+    public async Task<User?> UpdateProfileAsync(int id, string displayName, string email, string mobile, string? agencyName, string? agencyRegistrationNumber, string? licenceNumber, CancellationToken cancellationToken = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        var command = new CommandDefinition(
+            $@"UPDATE Users SET DisplayName = @DisplayName, Email = @Email, Mobile = @Mobile,
+                AgencyName = @AgencyName, AgencyRegistrationNumber = @AgencyRegistrationNumber, LicenceNumber = @LicenceNumber
+              OUTPUT INSERTED.{SelectColumns.Replace(", ", ", INSERTED.")}
+              WHERE Id = @Id",
+            new { Id = id, DisplayName = displayName, Email = email, Mobile = mobile, AgencyName = agencyName, AgencyRegistrationNumber = agencyRegistrationNumber, LicenceNumber = licenceNumber },
+            cancellationToken: cancellationToken);
+        return await connection.QueryFirstOrDefaultAsync<User>(command);
+    }
 }

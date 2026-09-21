@@ -18,19 +18,17 @@ public class ListingOutdoorFeatureService
         _mapper = mapper;
     }
 
-    public async Task<IEnumerable<OutdoorFeatureDto>> GetByListingIdAsync(int listingId, CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<OutdoorFeatureDto>> GetByListingIdAsync(int listingId, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
     {
-        var listing = await _listingRepo.GetByIdAsync(listingId, cancellationToken);
-        if (listing == null) throw new KeyNotFoundException($"Listing {listingId} not found");
+        await _listingRepo.AssertOwnedAsync(listingId, userId, isAdmin, cancellationToken);
 
         var features = await _outdoorFeatureRepo.GetByListingIdAsync(listingId, cancellationToken);
         return _mapper.Map<List<OutdoorFeatureDto>>(features);
     }
 
-    public async Task<OutdoorFeatureDto> AddAsync(int listingId, AddOutdoorFeatureRequest request, CancellationToken cancellationToken = default)
+    public async Task<OutdoorFeatureDto> AddAsync(int listingId, AddOutdoorFeatureRequest request, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
     {
-        var listing = await _listingRepo.GetByIdAsync(listingId, cancellationToken);
-        if (listing == null) throw new KeyNotFoundException($"Listing {listingId} not found");
+        await _listingRepo.AssertOwnedAsync(listingId, userId, isAdmin, cancellationToken);
 
         var feature = _mapper.Map<ListingOutdoorFeature>(request);
         feature.ListingId = listingId;
@@ -39,10 +37,9 @@ public class ListingOutdoorFeatureService
         return _mapper.Map<OutdoorFeatureDto>(result);
     }
 
-    public async Task DeleteAsync(int listingId, int id, CancellationToken cancellationToken = default)
+    public async Task DeleteAsync(int listingId, int id, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
     {
-        var listing = await _listingRepo.GetByIdAsync(listingId, cancellationToken);
-        if (listing == null) throw new KeyNotFoundException($"Listing {listingId} not found");
+        await _listingRepo.AssertOwnedAsync(listingId, userId, isAdmin, cancellationToken);
 
         var feature = await _outdoorFeatureRepo.GetByIdAsync(id, cancellationToken);
         if (feature is null || feature.ListingId != listingId)
@@ -51,10 +48,9 @@ public class ListingOutdoorFeatureService
         await _outdoorFeatureRepo.DeleteAsync(id, cancellationToken);
     }
 
-    public async Task<IEnumerable<OutdoorFeatureDto>> ReplaceAllAsync(int listingId, ReplaceOutdoorFeaturesRequest request, CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<OutdoorFeatureDto>> ReplaceAllAsync(int listingId, ReplaceOutdoorFeaturesRequest request, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
     {
-        var listing = await _listingRepo.GetByIdAsync(listingId, cancellationToken);
-        if (listing == null) throw new KeyNotFoundException($"Listing {listingId} not found");
+        await _listingRepo.AssertOwnedAsync(listingId, userId, isAdmin, cancellationToken);
 
         var result = await _outdoorFeatureRepo.ReplaceAllAsync(listingId, request.Descriptions, cancellationToken);
         return _mapper.Map<List<OutdoorFeatureDto>>(result);
