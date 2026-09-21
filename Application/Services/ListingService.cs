@@ -116,23 +116,35 @@ public class ListingService
     public async Task DeleteAsync(int id, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
     {
         await AssertOwnedAsync(id, userId, isAdmin, cancellationToken);
-        // Best-effort R2 cleanup so the bucket does not grow forever;
-        // DB rows are removed by cascade even if this fails.
-        try
-        {
-            var photos = await _photoRepo.GetByListingIdAsync(id, cancellationToken);
-            var prefix = _r2Options.Value.PublicUrl.TrimEnd('/') + "/";
-            foreach (var photo in photos)
-            {
-                var key = photo.Url.StartsWith(prefix) ? photo.Url[prefix.Length..] : photo.Url;
-                await _imageService.DeleteAsync(key);
-            }
-        }
-        catch
-        {
-            // Fall through to DB delete regardless.
-        }
+
+        // Collect the listing's R2 objects (listing photos and room photos) before the
+        // rows that reference them are gone.
+        var photos = await _photoRepo.GetByListingIdAsync(id, cancellationToken);
+        var rooms = await _roomRepo.GetByListingIdAsync(id, cancellationToken);
+        var keys = photos.Select(p => p.Url)
+            .Concat(rooms.Where(r => r.PhotoUrl is not null).Select(r => r.PhotoUrl!))
+            .Select(ExtractKeyFromUrl)
+            // Only objects stored under this listing; a stray URL must never let a
+            // delete reach another listing's files.
+            .Where(k => k.StartsWith($"listings/{id}/") || k.StartsWith($"rooms/{id}/"))
+            .Distinct()
+            .ToList();
+
+        // Database first: if it fails, the listing still has all its photos.
         await _listingRepo.DeleteAsync(id, userId, isAdmin, cancellationToken);
+
+        // Then best-effort R2 cleanup so the bucket does not grow forever.
+        foreach (var key in keys)
+        {
+            try { await _imageService.DeleteAsync(key); }
+            catch { /* An orphaned object is harmless; the listing is already gone. */ }
+        }
+    }
+
+    private string ExtractKeyFromUrl(string url)
+    {
+        var prefix = _r2Options.Value.PublicUrl.TrimEnd('/') + "/";
+        return url.StartsWith(prefix) ? url[prefix.Length..] : url;
     }
 
     public async Task<ListingResponse?> SubmitAsync(int id, CancellationToken cancellationToken = default)

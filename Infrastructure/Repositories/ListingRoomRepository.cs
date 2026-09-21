@@ -52,15 +52,16 @@ public class ListingRoomRepository
         return await connection.QueryFirstOrDefaultAsync<ListingRoom>(command);
     }
 
-    public async Task<ListingRoom?> UpdateAsync(ListingRoom room, CancellationToken cancellationToken = default)
+    /// <summary>Partial update: a null argument leaves that column unchanged.</summary>
+    public async Task<ListingRoom?> UpdateAsync(int id, string? name, int? roomTypeId, string? roomTypeOther, CancellationToken cancellationToken = default)
     {
         using var connection = _connectionFactory.CreateConnection();
         var command = new CommandDefinition(
             "UPDATE ListingRoom SET Name = COALESCE(@Name, Name), RoomTypeId = COALESCE(@RoomTypeId, RoomTypeId), " +
-            "RoomTypeOther = COALESCE(@RoomTypeOther, RoomTypeOther), PhotoUrl = COALESCE(@PhotoUrl, PhotoUrl), UpdatedAt = GETUTCDATE() " +
+            "RoomTypeOther = COALESCE(@RoomTypeOther, RoomTypeOther), UpdatedAt = GETUTCDATE() " +
             "OUTPUT INSERTED.Id, INSERTED.ListingId, INSERTED.Name, INSERTED.RoomTypeId, INSERTED.RoomTypeOther, INSERTED.PhotoUrl, INSERTED.CreatedAt, INSERTED.UpdatedAt " +
             "WHERE Id = @Id",
-            new { room.Id, room.Name, room.RoomTypeId, room.RoomTypeOther, room.PhotoUrl },
+            new { Id = id, Name = name, RoomTypeId = roomTypeId, RoomTypeOther = roomTypeOther },
             cancellationToken: cancellationToken);
         return await connection.QueryFirstOrDefaultAsync<ListingRoom>(command);
     }
@@ -201,11 +202,13 @@ public class ListingRoomRepository
         return await connection.QueryFirstOrDefaultAsync<ListingRoomCustomFeature>(command);
     }
 
-    public async Task DeleteCustomFeatureAsync(int id, CancellationToken cancellationToken = default)
+    /// <summary>Deletes the custom feature only if it belongs to the given room.</summary>
+    public async Task<bool> DeleteCustomFeatureAsync(int id, int listingRoomId, CancellationToken cancellationToken = default)
     {
         using var connection = _connectionFactory.CreateConnection();
         var command = new CommandDefinition(
-            "DELETE FROM ListingRoomCustomFeature WHERE Id = @Id", new { Id = id }, cancellationToken: cancellationToken);
-        await connection.ExecuteAsync(command);
+            "DELETE FROM ListingRoomCustomFeature WHERE Id = @Id AND ListingRoomId = @ListingRoomId",
+            new { Id = id, ListingRoomId = listingRoomId }, cancellationToken: cancellationToken);
+        return await connection.ExecuteAsync(command) > 0;
     }
 }

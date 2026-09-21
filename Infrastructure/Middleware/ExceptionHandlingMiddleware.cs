@@ -32,6 +32,17 @@ public class ExceptionHandlingMiddleware
                 Detail = ex.Message
             });
         }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogWarning(ex, "Unauthorized");
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            await context.Response.WriteAsJsonAsync(new ProblemDetails
+            {
+                Type = "https://httpstatuses.io/401",
+                Status = StatusCodes.Status401Unauthorized,
+                Title = "Unauthorized"
+            });
+        }
         catch (SqlException ex) when (ex.Number is 2601 or 2627)
         {
             _logger.LogWarning(ex, "Unique constraint violation");

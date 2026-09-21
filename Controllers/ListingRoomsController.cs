@@ -43,6 +43,16 @@ public class ListingRoomsController : ControllerBase
     [HttpPost("{roomId}/photo")]
     public async Task<IActionResult> UploadPhoto(int listingId, int roomId, IFormFile file, CancellationToken cancellationToken)
     {
+        if (file is null || file.Length == 0)
+            return BadRequest(new ValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["file"] = ["A file is required."]
+            })
+            {
+                Type = "https://httpstatuses.io/400",
+                Title = "Validation failed"
+            });
+
         var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".webp" };
         var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
         if (!allowedExtensions.Contains(ext))

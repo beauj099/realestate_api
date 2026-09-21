@@ -16,6 +16,17 @@ public class ListingRepository
 
     private const string Columns = "Id, ReferenceNumber, P24Ref, PropertyTypeId, ListingValuationId, ListDate, Status, UserId, CreatedAt, UpdatedAt";
 
+    /// <summary>
+    /// The @UserId filter value for owner-scoped queries: null for admins (full view),
+    /// otherwise the caller's id. A non-admin without a user id must not fall through
+    /// to the admin's null filter, so that is refused rather than widened.
+    /// </summary>
+    private static int? OwnerFilter(int? userId, bool isAdmin)
+    {
+        if (isAdmin) return null;
+        return userId ?? throw new UnauthorizedAccessException("The caller has no user id.");
+    }
+
     public async Task<Listing?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
     {
         using var connection = _connectionFactory.CreateConnection();
@@ -32,13 +43,14 @@ public class ListingRepository
     /// </summary>
     public async Task<Listing?> GetOwnedByIdAsync(int id, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
     {
-        if (isAdmin || userId is null)
+        var ownerId = OwnerFilter(userId, isAdmin);
+        if (ownerId is null)
             return await GetByIdAsync(id, cancellationToken);
 
         using var connection = _connectionFactory.CreateConnection();
         var command = new CommandDefinition(
             $"SELECT {Columns} FROM Listings WHERE Id = @Id AND UserId = @UserId",
-            new { Id = id, UserId = userId }, cancellationToken: cancellationToken);
+            new { Id = id, UserId = ownerId }, cancellationToken: cancellationToken);
         return await connection.QueryFirstOrDefaultAsync<Listing>(command);
     }
 
@@ -56,8 +68,7 @@ public class ListingRepository
 
     public async Task<IEnumerable<Listing>> GetAllAsync(string? status, DateTime? dateFrom, DateTime? dateTo, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
     {
-        // Admins pass userId null to keep the full view.
-        var effectiveUserId = isAdmin ? null : userId;
+        var effectiveUserId = OwnerFilter(userId, isAdmin);
         using var connection = _connectionFactory.CreateConnection();
         var command = new CommandDefinition(
             $"SELECT {Columns} FROM Listings " +
@@ -75,7 +86,7 @@ public class ListingRepository
     /// </summary>
     public async Task<IEnumerable<RealEstateApi.Application.DTOs.ListingSummaryDto>> GetSummariesAsync(string? status, DateTime? dateFrom, DateTime? dateTo, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
     {
-        var effectiveUserId = isAdmin ? null : userId;
+        var effectiveUserId = OwnerFilter(userId, isAdmin);
         using var connection = _connectionFactory.CreateConnection();
         var command = new CommandDefinition(
             "SELECT l.Id, l.ReferenceNumber, l.P24Ref, l.PropertyTypeId, l.ListingValuationId, l.ListDate, l.Status, l.CreatedAt, l.UpdatedAt, " +
@@ -178,7 +189,7 @@ public class ListingRepository
             $"UPDATE Listings SET Status = COALESCE(@Status, Status), P24Ref = COALESCE(@P24Ref, P24Ref), PropertyTypeId = COALESCE(@PropertyTypeId, PropertyTypeId), UpdatedAt = GETUTCDATE() " +
             $"OUTPUT INSERTED.{Columns.Replace(", ", ", INSERTED.")} " +
             "WHERE Id = @Id AND (@UserId IS NULL OR UserId = @UserId)",
-            new { Id = id, Status = status, P24Ref = p24Ref, PropertyTypeId = propertyTypeId, UserId = isAdmin ? null : userId },
+            new { Id = id, Status = status, P24Ref = p24Ref, PropertyTypeId = propertyTypeId, UserId = OwnerFilter(userId, isAdmin) },
             cancellationToken: cancellationToken);
         return await connection.QueryFirstOrDefaultAsync<Listing>(command);
     }
@@ -191,7 +202,7 @@ public class ListingRepository
     public async Task DeleteAsync(int id, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
     {
         using var connection = _connectionFactory.CreateConnection();
-        var effectiveUserId = isAdmin ? null : userId;
+        var effectiveUserId = OwnerFilter(userId, isAdmin);
         var listingCommand = new CommandDefinition(
             $"SELECT {Columns} FROM Listings WHERE Id = @Id AND (@UserId IS NULL OR UserId = @UserId)",
             new { Id = id, UserId = effectiveUserId }, cancellationToken: cancellationToken);
@@ -223,13 +234,15 @@ public class ListingRepository
             "DELETE FROM ListingAddress WHERE ListingId = @Id", new { Id = id }, transaction: transaction, cancellationToken: cancellationToken));
         await connection.ExecuteAsync(new CommandDefinition(
             "DELETE FROM ListingBuildingInfo WHERE ListingId = @Id", new { Id = id }, transaction: transaction, cancellationToken: cancellationToken));
+        await connection.ExecuteAsync(new CommandDefinition(
+            "DELETE FROM Listings WHERE Id = @Id AND (@UserId IS NULL OR UserId = @UserId)", new { Id = id, UserId = effectiveUserId }, transaction: transaction, cancellationToken: cancellationToken));
+        // Listings.ListingValuationId points at the valuation, so the listing row has to
+        // go first or this delete violates that reference.
         if (listing.ListingValuationId is not null)
         {
             await connection.ExecuteAsync(new CommandDefinition(
                 "DELETE FROM ListingValuation WHERE Id = @Id", new { Id = listing.ListingValuationId }, transaction: transaction, cancellationToken: cancellationToken));
         }
-        await connection.ExecuteAsync(new CommandDefinition(
-            "DELETE FROM Listings WHERE Id = @Id AND (@UserId IS NULL OR UserId = @UserId)", new { Id = id, UserId = effectiveUserId }, transaction: transaction, cancellationToken: cancellationToken));
 
         transaction.Commit();
     }
@@ -246,7 +259,7 @@ public class ListingRepository
             $"UPDATE Listings SET Status = @Status, ListDate = GETUTCDATE(), UpdatedAt = GETUTCDATE() " +
             $"OUTPUT INSERTED.{Columns.Replace(", ", ", INSERTED.")} " +
             "WHERE Id = @Id AND Status = @CurrentStatus AND (@UserId IS NULL OR UserId = @UserId)",
-            new { Id = id, Status = ListingStatus.Submitted, CurrentStatus = ListingStatus.Incomplete, UserId = isAdmin ? null : userId },
+            new { Id = id, Status = ListingStatus.Submitted, CurrentStatus = ListingStatus.Incomplete, UserId = OwnerFilter(userId, isAdmin) },
             cancellationToken: cancellationToken);
         return await connection.QueryFirstOrDefaultAsync<Listing>(command);
     }

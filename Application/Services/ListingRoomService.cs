@@ -44,6 +44,9 @@ public class ListingRoomService
 
         var room = _mapper.Map<ListingRoom>(request);
         room.ListingId = listingId;
+        // PhotoUrl is only ever set by the upload endpoint. A client-supplied value could
+        // point at another listing's object, which a later room delete would then remove.
+        room.PhotoUrl = null;
 
         var created = await _roomRepo.CreateAsync(room, cancellationToken);
         return new RoomDto(
@@ -60,10 +63,10 @@ public class ListingRoomService
 
         await GetOwnedRoomAsync(listingId, roomId, cancellationToken);
 
-        var room = _mapper.Map<ListingRoom>(request);
-        room.Id = roomId;
-
-        var updated = await _roomRepo.UpdateAsync(room, cancellationToken);
+        // Omitted fields stay as they are. Mapping onto ListingRoom would turn a missing
+        // RoomTypeId into 0 and a missing Name into "", overwriting the stored values.
+        // PhotoUrl is ignored for the same reason as in CreateRoomAsync.
+        var updated = await _roomRepo.UpdateAsync(roomId, request.Name, request.RoomTypeId, request.RoomTypeOther, cancellationToken);
         if (updated == null) return null;
 
         var conditionTask = _roomRepo.GetConditionByRoomIdAsync(updated.Id, cancellationToken);
@@ -87,11 +90,7 @@ public class ListingRoomService
         if (listing == null) throw new KeyNotFoundException($"Listing {listingId} not found");
 
         var room = await GetOwnedRoomAsync(listingId, roomId, cancellationToken);
-        if (room.PhotoUrl is not null)
-        {
-            var key = ExtractKeyFromUrl(room.PhotoUrl);
-            await _imageService.DeleteAsync(key);
-        }
+        await DeleteRoomObjectAsync(listingId, roomId, room.PhotoUrl);
 
         await _roomRepo.DeleteAsync(roomId, cancellationToken);
     }
@@ -103,11 +102,7 @@ public class ListingRoomService
 
         var room = await GetOwnedRoomAsync(listingId, roomId, cancellationToken);
 
-        if (room.PhotoUrl is not null)
-        {
-            var existingKey = ExtractKeyFromUrl(room.PhotoUrl);
-            await _imageService.DeleteAsync(existingKey);
-        }
+        await DeleteRoomObjectAsync(listingId, roomId, room.PhotoUrl);
 
         var key = $"rooms/{listingId}/{roomId}/{fileName}";
         var url = await _imageService.UploadAsync(fileStream, key, contentType);
@@ -125,9 +120,21 @@ public class ListingRoomService
 
         if (room.PhotoUrl is null) return;
 
-        var key = ExtractKeyFromUrl(room.PhotoUrl);
-        await _imageService.DeleteAsync(key);
+        await DeleteRoomObjectAsync(listingId, roomId, room.PhotoUrl);
         await _roomRepo.UpdatePhotoUrlAsync(roomId, null, cancellationToken);
+    }
+
+    /// <summary>
+    /// Deletes a room's photo from R2, but only when it lives under this room's own
+    /// prefix. Rows written before PhotoUrl was server-only may hold an arbitrary URL,
+    /// and deleting that could remove another listing's file.
+    /// </summary>
+    private async Task DeleteRoomObjectAsync(int listingId, int roomId, string? photoUrl)
+    {
+        if (photoUrl is null) return;
+        var key = ExtractKeyFromUrl(photoUrl);
+        if (!key.StartsWith($"rooms/{listingId}/{roomId}/")) return;
+        await _imageService.DeleteAsync(key);
     }
 
     private string ExtractKeyFromUrl(string photoUrl)
@@ -215,7 +222,9 @@ public class ListingRoomService
 
         await GetOwnedRoomAsync(listingId, roomId, cancellationToken);
 
-        await _roomRepo.DeleteCustomFeatureAsync(customFeatureId, cancellationToken);
+        var deleted = await _roomRepo.DeleteCustomFeatureAsync(customFeatureId, roomId, cancellationToken);
+        if (!deleted)
+            throw new KeyNotFoundException($"Custom feature {customFeatureId} not found under room {roomId}");
     }
 
     private async Task<ListingRoom> GetOwnedRoomAsync(int listingId, int roomId, CancellationToken cancellationToken)
