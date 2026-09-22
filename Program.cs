@@ -91,6 +91,9 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseCors("AllowAll");
+// Serves the temporary local photo storage at /uploads/... (see
+// LocalFileImageService). Not needed once Storage:Provider is "R2".
+app.UseStaticFiles();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();

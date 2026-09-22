@@ -11,14 +11,14 @@ public class ListingRoomService
 {
     private readonly ListingRepository _listingRepo;
     private readonly ListingRoomRepository _roomRepo;
-    private readonly R2ImageService _imageService;
+    private readonly IImageStorage _imageService;
     private readonly IOptions<R2Options> _r2Options;
     private readonly IMapper _mapper;
 
     public ListingRoomService(
         ListingRepository listingRepo,
         ListingRoomRepository roomRepo,
-        R2ImageService imageService,
+        IImageStorage imageService,
         IOptions<R2Options> r2Options,
         IMapper mapper)
     {
@@ -139,6 +139,9 @@ public class ListingRoomService
 
     private string ExtractKeyFromUrl(string photoUrl)
     {
+        const string localPrefix = "/uploads/";
+        if (photoUrl.StartsWith(localPrefix, StringComparison.OrdinalIgnoreCase))
+            return photoUrl[localPrefix.Length..];
         var prefix = _r2Options.Value.PublicUrl.TrimEnd('/') + "/";
         return photoUrl.StartsWith(prefix) ? photoUrl[prefix.Length..] : photoUrl;
     }

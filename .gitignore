@@ -37,6 +37,8 @@ bld/
 .vs/
 # Uncomment if you have tasks that create the project's static files in wwwroot
 #wwwroot/
+# Local dev photo uploads served from wwwroot -- never commit these.
+wwwroot/uploads/
 
 # Visual Studio 2017 auto generated files
 Generated\ Files/

@@ -13,7 +13,20 @@ public static class DependencyInjection
         services.AddSingleton(new DbConnectionFactory(connectionString!));
 
         services.Configure<R2Options>(configuration.GetSection(R2Options.SectionName));
+        services.Configure<LocalStorageOptions>(configuration.GetSection(LocalStorageOptions.SectionName));
         services.AddSingleton<R2ImageService>();
+        services.AddSingleton<LocalFileImageService>();
+
+        // Temporary arrangement: local disk until the R2 bucket exists.
+        // Flip "Storage:Provider" to "R2" (appsettings / env STORAGE__PROVIDER)
+        // once the credentials are in place -- no other code changes needed.
+        services.AddSingleton<IImageStorage>(provider =>
+        {
+            var configured = configuration.GetValue<string>("Storage:Provider");
+            if (configured is not null && configured.Equals("R2", StringComparison.OrdinalIgnoreCase))
+                return provider.GetRequiredService<R2ImageService>();
+            return provider.GetRequiredService<LocalFileImageService>();
+        });
 
         return services;
     }

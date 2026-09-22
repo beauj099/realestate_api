@@ -19,7 +19,7 @@ public class ListingService
     private readonly ContactRepository _contactRepo;
     private readonly ListingOutdoorFeatureRepository _outdoorFeatureRepo;
     private readonly ListingPhotoRepository _photoRepo;
-    private readonly R2ImageService _imageService;
+    private readonly IImageStorage _imageService;
     private readonly IOptions<R2Options> _r2Options;
     private readonly IMapper _mapper;
 
@@ -34,7 +34,7 @@ public class ListingService
         ContactRepository contactRepo,
         ListingOutdoorFeatureRepository outdoorFeatureRepo,
         ListingPhotoRepository photoRepo,
-        R2ImageService imageService,
+        IImageStorage imageService,
         IOptions<R2Options> r2Options,
         IMapper mapper)
     {
@@ -117,8 +117,9 @@ public class ListingService
     {
         await AssertOwnedAsync(id, userId, isAdmin, cancellationToken);
 
-        // Collect the listing's R2 objects (listing photos and room photos) before the
-        // rows that reference them are gone.
+        // Collect the listing's stored objects (listing photos and room photos)
+        // before the rows that reference them are gone. Works for both the
+        // local "/uploads/..." URLs and the absolute R2 URLs.
         var photos = await _photoRepo.GetByListingIdAsync(id, cancellationToken);
         var rooms = await _roomRepo.GetByListingIdAsync(id, cancellationToken);
         var keys = photos.Select(p => p.Url)
@@ -133,7 +134,7 @@ public class ListingService
         // Database first: if it fails, the listing still has all its photos.
         await _listingRepo.DeleteAsync(id, userId, isAdmin, cancellationToken);
 
-        // Then best-effort R2 cleanup so the bucket does not grow forever.
+        // Then best-effort storage cleanup so orphaned files do not pile up.
         foreach (var key in keys)
         {
             try { await _imageService.DeleteAsync(key); }
@@ -143,6 +144,9 @@ public class ListingService
 
     private string ExtractKeyFromUrl(string url)
     {
+        const string localPrefix = "/uploads/";
+        if (url.StartsWith(localPrefix, StringComparison.OrdinalIgnoreCase))
+            return url[localPrefix.Length..];
         var prefix = _r2Options.Value.PublicUrl.TrimEnd('/') + "/";
         return url.StartsWith(prefix) ? url[prefix.Length..] : url;
     }

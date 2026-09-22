@@ -9,13 +9,13 @@ public class ListingPhotoService
 {
     private readonly ListingRepository _listingRepo;
     private readonly ListingPhotoRepository _photoRepo;
-    private readonly R2ImageService _imageService;
+    private readonly IImageStorage _imageService;
     private readonly IOptions<R2Options> _r2Options;
 
     public ListingPhotoService(
         ListingRepository listingRepo,
         ListingPhotoRepository photoRepo,
-        R2ImageService imageService,
+        IImageStorage imageService,
         IOptions<R2Options> r2Options)
     {
         _listingRepo = listingRepo;
@@ -65,6 +65,11 @@ public class ListingPhotoService
 
     private string ExtractKeyFromUrl(string photoUrl)
     {
+        // Local dev storage returns relative "/uploads/..." URLs; R2 returns
+        // absolute URLs under PublicUrl. Both share the same key layout.
+        const string localPrefix = "/uploads/";
+        if (photoUrl.StartsWith(localPrefix, StringComparison.OrdinalIgnoreCase))
+            return photoUrl[localPrefix.Length..];
         var prefix = _r2Options.Value.PublicUrl.TrimEnd('/') + "/";
         return photoUrl.StartsWith(prefix) ? photoUrl[prefix.Length..] : photoUrl;
     }
