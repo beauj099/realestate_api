@@ -6,7 +6,7 @@ namespace RealEstateApi.Infrastructure.Repositories;
 
 public class PropertyRunningCostsRepository
 {
-    private const string Columns = "Id, ListingId, MonthlyLevy, MonthlyRates, Electricity, Water, MunicipalAccount";
+    private const string Columns = "Id, ListingId, MonthlyLevy, MonthlyRates, Electricity, Water, Sewage, Refuse";
 
     private readonly DbConnectionFactory _connectionFactory;
 
@@ -31,9 +31,9 @@ public class PropertyRunningCostsRepository
             "MERGE PropertyRunningCosts AS t " +
             "USING (SELECT @ListingId AS ListingId) AS s " +
             "ON t.ListingId = s.ListingId " +
-            "WHEN MATCHED THEN UPDATE SET MonthlyLevy = @MonthlyLevy, MonthlyRates = @MonthlyRates, Electricity = @Electricity, Water = @Water, MunicipalAccount = @MunicipalAccount " +
-            "WHEN NOT MATCHED THEN INSERT (ListingId, MonthlyLevy, MonthlyRates, Electricity, Water, MunicipalAccount) " +
-            "VALUES (@ListingId, @MonthlyLevy, @MonthlyRates, @Electricity, @Water, @MunicipalAccount) " +
+            "WHEN MATCHED THEN UPDATE SET MonthlyLevy = @MonthlyLevy, MonthlyRates = @MonthlyRates, Electricity = @Electricity, Water = @Water, Sewage = @Sewage, Refuse = @Refuse " +
+            "WHEN NOT MATCHED THEN INSERT (ListingId, MonthlyLevy, MonthlyRates, Electricity, Water, Sewage, Refuse) " +
+            "VALUES (@ListingId, @MonthlyLevy, @MonthlyRates, @Electricity, @Water, @Sewage, @Refuse) " +
             $"OUTPUT INSERTED.{Columns.Replace(", ", ", INSERTED.")};",
             costs, cancellationToken: cancellationToken);
         return await connection.QueryFirstOrDefaultAsync<PropertyRunningCosts>(command);

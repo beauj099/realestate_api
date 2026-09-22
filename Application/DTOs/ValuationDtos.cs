@@ -18,7 +18,8 @@ public record UpsertRunningCostsRequest(
     decimal? MonthlyRates,
     decimal? Electricity,
     decimal? Water,
-    decimal? MunicipalAccount = null
+    decimal? Sewage,
+    decimal? Refuse
 );
 
 public record RunningCostsDto(
@@ -28,5 +29,6 @@ public record RunningCostsDto(
     decimal? MonthlyRates,
     decimal? Electricity,
     decimal? Water,
-    decimal? MunicipalAccount = null
+    decimal? Sewage,
+    decimal? Refuse
 );
