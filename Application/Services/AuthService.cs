@@ -7,28 +7,61 @@ using Microsoft.IdentityModel.Tokens;
 using RealEstateApi.Application.DTOs;
 using RealEstateApi.Domain.Models;
 using RealEstateApi.Infrastructure.Repositories;
+using RealEstateApi.Infrastructure.Services;
 
 namespace RealEstateApi.Application.Services;
 
 public class AuthService
 {
+    public const int PasswordResetCodeExpiryMinutes = 15;
+    public const int PasswordResetMaxAttempts = 5;
+
     private readonly UserRepository _userRepository;
     private readonly RefreshTokenRepository _refreshTokenRepository;
+    private readonly PasswordResetCodeRepository _passwordResetCodeRepository;
+    private readonly IEmailSender _emailSender;
+    private readonly ILogger<AuthService> _logger;
     private readonly JwtOptions _jwtOptions;
 
     public AuthService(
         UserRepository userRepository,
         RefreshTokenRepository refreshTokenRepository,
+        PasswordResetCodeRepository passwordResetCodeRepository,
+        IEmailSender emailSender,
+        ILogger<AuthService> logger,
         IOptions<JwtOptions> jwtOptions)
     {
         _userRepository = userRepository;
         _refreshTokenRepository = refreshTokenRepository;
+        _passwordResetCodeRepository = passwordResetCodeRepository;
+        _emailSender = emailSender;
+        _logger = logger;
         _jwtOptions = jwtOptions.Value;
     }
 
-    public async Task<LoginResponse?> LoginAsync(LoginRequest request, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Trims the login identifier (mobile keyboards add stray spaces) and lowercases
+    /// it when it looks like an email, since registration stores emails lowercased.
+    /// </summary>
+    public static string? NormalizeLoginUsername(string? username)
     {
-        var user = await _userRepository.GetByUsernameAsync(request.Username, cancellationToken);
+        if (string.IsNullOrWhiteSpace(username))
+            return null;
+        var trimmed = username.Trim();
+        return trimmed.Contains('@') ? trimmed.ToLowerInvariant() : trimmed;
+    }
+
+    /// <summary>Blank optional text becomes null; anything else is trimmed.</summary>
+    public static string? TrimToNull(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    public async Task<LoginResponse?> LoginAsync(LoginRequest? request, CancellationToken cancellationToken = default)
+    {
+        var username = NormalizeLoginUsername(request?.Username);
+        if (username is null || string.IsNullOrEmpty(request!.Password))
+            return null;
+
+        var user = await _userRepository.GetByUsernameAsync(username, cancellationToken);
         if (user is null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
             return null;
 
@@ -137,8 +170,6 @@ public class AuthService
             string.IsNullOrWhiteSpace(request.Email) ||
             string.IsNullOrWhiteSpace(request.Mobile) ||
             string.IsNullOrWhiteSpace(request.AgencyName) ||
-            string.IsNullOrWhiteSpace(request.AgencyRegistrationNumber) ||
-            string.IsNullOrWhiteSpace(request.LicenceNumber) ||
             string.IsNullOrWhiteSpace(request.Password))
             return null;
 
@@ -161,8 +192,8 @@ public class AuthService
             DisplayName = request.FullName.Trim(),
             Mobile = request.Mobile.Trim(),
             AgencyName = request.AgencyName.Trim(),
-            AgencyRegistrationNumber = request.AgencyRegistrationNumber.Trim(),
-            LicenceNumber = request.LicenceNumber.Trim(),
+            AgencyRegistrationNumber = TrimToNull(request.AgencyRegistrationNumber),
+            LicenceNumber = TrimToNull(request.LicenceNumber),
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
             Role = "Agent",
             IsActive = true,
@@ -210,4 +241,83 @@ public class AuthService
 
         return new LoginResponse(tokenString, expires, created.DisplayName, created.Role, refreshTokenRaw);
     }
+
+    /// <summary>
+    /// Issues a password reset code if an active user owns <paramref name="email"/>.
+    /// Deliberately silent when no account matches (and when the email fails to send)
+    /// so the endpoint cannot be used to discover which emails are registered.
+    /// </summary>
+    public async Task RequestPasswordResetAsync(string email, CancellationToken cancellationToken = default)
+    {
+        var normalizedEmail = email.Trim().ToLowerInvariant();
+        var user = await _userRepository.GetByEmailAsync(normalizedEmail, cancellationToken);
+        if (user is null || string.IsNullOrWhiteSpace(user.Email))
+            return;
+
+        var code = GeneratePasswordResetCode();
+
+        await _passwordResetCodeRepository.InvalidateActiveForUserAsync(user.Id, cancellationToken);
+        await _passwordResetCodeRepository.CreateAsync(new PasswordResetCode
+        {
+            UserId = user.Id,
+            CodeHash = HashPasswordResetCode(code),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(PasswordResetCodeExpiryMinutes),
+            CreatedAt = DateTime.UtcNow
+        }, cancellationToken);
+
+        var body =
+            $"Your RealWorth password reset code is {code}. It expires in {PasswordResetCodeExpiryMinutes} minutes. " +
+            "If you didn't ask for this, ignore this email.";
+
+        try
+        {
+            await _emailSender.SendAsync(user.Email, "Your RealWorth password reset code", body, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Surfacing this as a 500 would reveal that the account exists.
+            _logger.LogError(ex, "Failed to send password reset email to user {UserId}", user.Id);
+        }
+    }
+
+    /// <summary>
+    /// Sets a new password if <paramref name="code"/> is the user's current, unexpired
+    /// reset code. Returns false for any failure (unknown email, wrong / expired / used /
+    /// locked-out code) without distinguishing between them.
+    /// </summary>
+    public async Task<bool> ResetPasswordAsync(string email, string code, string newPassword, CancellationToken cancellationToken = default)
+    {
+        var normalizedEmail = email.Trim().ToLowerInvariant();
+        var user = await _userRepository.GetByEmailAsync(normalizedEmail, cancellationToken);
+        if (user is null)
+            return false;
+
+        var stored = await _passwordResetCodeRepository.GetActiveForUserAsync(user.Id, PasswordResetMaxAttempts, cancellationToken);
+        if (stored is null)
+            return false;
+
+        var suppliedHash = Encoding.UTF8.GetBytes(HashPasswordResetCode(code.Trim()));
+        var storedHash = Encoding.UTF8.GetBytes(stored.CodeHash);
+        if (!CryptographicOperations.FixedTimeEquals(suppliedHash, storedHash))
+        {
+            await _passwordResetCodeRepository.RegisterFailedAttemptAsync(stored.Id, PasswordResetMaxAttempts, cancellationToken);
+            return false;
+        }
+
+        // Claim the code first so two concurrent requests cannot both succeed.
+        if (!await _passwordResetCodeRepository.MarkUsedAsync(stored.Id, PasswordResetMaxAttempts, cancellationToken))
+            return false;
+
+        await _userRepository.UpdatePasswordHashAsync(user.Id, BCrypt.Net.BCrypt.HashPassword(newPassword), cancellationToken);
+        await _refreshTokenRepository.RevokeUserTokensAsync(user.Id, cancellationToken);
+        return true;
+    }
+
+    /// <summary>A uniformly random 6-digit code (leading zeros kept).</summary>
+    public static string GeneratePasswordResetCode() =>
+        RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6");
+
+    /// <summary>SHA-256, base64 -- the same scheme used for refresh tokens.</summary>
+    public static string HashPasswordResetCode(string code) =>
+        Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(code)));
 }

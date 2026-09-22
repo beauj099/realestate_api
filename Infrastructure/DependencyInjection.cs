@@ -28,6 +28,14 @@ public static class DependencyInjection
             return provider.GetRequiredService<LocalFileImageService>();
         });
 
+        // Email: real SMTP when Smtp:Host is set, otherwise log the message so a
+        // dev without SMTP can read e.g. password reset codes from the console.
+        services.Configure<SmtpOptions>(configuration.GetSection(SmtpOptions.SectionName));
+        if (!string.IsNullOrWhiteSpace(configuration.GetValue<string>("Smtp:Host")))
+            services.AddSingleton<IEmailSender, SmtpEmailSender>();
+        else
+            services.AddSingleton<IEmailSender, LoggingEmailSender>();
+
         return services;
     }
 
@@ -43,9 +51,11 @@ public static class DependencyInjection
         services.AddScoped<ListingParkingRepository>();
         services.AddScoped<ContactRepository>();
         services.AddScoped<ListingPhotoRepository>();
+        services.AddScoped<ListingDocumentRepository>();
         services.AddScoped<ListingOutdoorFeatureRepository>();
         services.AddScoped<UserRepository>();
         services.AddScoped<RefreshTokenRepository>();
+        services.AddScoped<PasswordResetCodeRepository>();
 
         return services;
     }
@@ -58,6 +68,7 @@ public static class DependencyInjection
         services.AddScoped<ListingParkingService>();
         services.AddScoped<ListingContactService>();
         services.AddScoped<ListingPhotoService>();
+        services.AddScoped<ListingDocumentService>();
         services.AddScoped<ListingOutdoorFeatureService>();
         services.AddScoped<AuthService>();
         services.AddScoped<AgentProfileService>();
