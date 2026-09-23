@@ -1,5 +1,6 @@
  using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.IdentityModel.Tokens;
 using RealEstateApi.Application.Services;
 using RealEstateApi.Infrastructure;
@@ -93,7 +94,10 @@ app.UseHttpsRedirection();
 app.UseCors("AllowAll");
 // Serves the temporary local photo storage at /uploads/... (see
 // LocalFileImageService). Not needed once Storage:Provider is "R2".
-app.UseStaticFiles();
+// .heic (listing documents) is not in the default content-type map, so it would 404.
+var staticContentTypes = new FileExtensionContentTypeProvider();
+staticContentTypes.Mappings[".heic"] = "image/heic";
+app.UseStaticFiles(new StaticFileOptions { ContentTypeProvider = staticContentTypes });
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();

@@ -1,6 +1,8 @@
 namespace RealEstateApi.Application.DTOs;
 
-public record LoginRequest(string Username, string Password);
+// Nullable so a missing field reaches AuthService and yields 401, rather than
+// the automatic [ApiController] 400 that non-nullable reference types trigger.
+public record LoginRequest(string? Username, string? Password);
 
 public record LoginResponse(string Token, DateTime ExpiresAt, string DisplayName, string Role, string RefreshToken);
 
@@ -13,10 +15,16 @@ public record RegisterRequest(
     string Email,
     string Mobile,
     string AgencyName,
-    string AgencyRegistrationNumber,
-    string LicenceNumber,
+    string? AgencyRegistrationNumber,
+    string? LicenceNumber,
     string Password
 );
+
+// Fields are nullable so blank/missing values are reported through our own
+// camelCase ValidationProblemDetails instead of the automatic model-state 400.
+public record ForgotPasswordRequest(string? Email);
+
+public record ResetPasswordRequest(string? Email, string? Code, string? NewPassword);
 
 public record AgentProfileDto(
     int Id,

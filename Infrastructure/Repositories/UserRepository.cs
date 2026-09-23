@@ -80,4 +80,13 @@ public class UserRepository
             cancellationToken: cancellationToken);
         return await connection.QueryFirstOrDefaultAsync<User>(command);
     }
+
+    public async Task UpdatePasswordHashAsync(int id, string passwordHash, CancellationToken cancellationToken = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        var command = new CommandDefinition(
+            "UPDATE Users SET PasswordHash = @PasswordHash WHERE Id = @Id",
+            new { Id = id, PasswordHash = passwordHash }, cancellationToken: cancellationToken);
+        await connection.ExecuteAsync(command);
+    }
 }

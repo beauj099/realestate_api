@@ -1,4 +1,5 @@
 using AutoMapper;
+using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Options;
 using RealEstateApi.Application.DTOs;
 using RealEstateApi.Domain.Models;
@@ -19,6 +20,7 @@ public class ListingService
     private readonly ContactRepository _contactRepo;
     private readonly ListingOutdoorFeatureRepository _outdoorFeatureRepo;
     private readonly ListingPhotoRepository _photoRepo;
+    private readonly ListingDocumentRepository _documentRepo;
     private readonly IImageStorage _imageService;
     private readonly IOptions<R2Options> _r2Options;
     private readonly IMapper _mapper;
@@ -34,6 +36,7 @@ public class ListingService
         ContactRepository contactRepo,
         ListingOutdoorFeatureRepository outdoorFeatureRepo,
         ListingPhotoRepository photoRepo,
+        ListingDocumentRepository documentRepo,
         IImageStorage imageService,
         IOptions<R2Options> r2Options,
         IMapper mapper)
@@ -48,6 +51,7 @@ public class ListingService
         _contactRepo = contactRepo;
         _outdoorFeatureRepo = outdoorFeatureRepo;
         _photoRepo = photoRepo;
+        _documentRepo = documentRepo;
         _imageService = imageService;
         _r2Options = r2Options;
         _mapper = mapper;
@@ -117,14 +121,16 @@ public class ListingService
     {
         await AssertOwnedAsync(id, userId, isAdmin, cancellationToken);
 
-        // Collect the listing's stored objects (listing photos and room photos)
-        // before the rows that reference them are gone. Works for both the
-        // local "/uploads/..." URLs and the absolute R2 URLs.
+        // Collect the listing's stored objects (listing photos, room photos and
+        // documents) before the rows that reference them are gone. Works for both
+        // the local "/uploads/..." URLs and the absolute R2 URLs.
         var photos = await _photoRepo.GetByListingIdAsync(id, cancellationToken);
         var rooms = await _roomRepo.GetByListingIdAsync(id, cancellationToken);
+        var documentKeys = await GetDocumentStorageKeysAsync(id, cancellationToken);
         var keys = photos.Select(p => p.Url)
             .Concat(rooms.Where(r => r.PhotoUrl is not null).Select(r => r.PhotoUrl!))
             .Select(ExtractKeyFromUrl)
+            .Concat(documentKeys)
             // Only objects stored under this listing; a stray URL must never let a
             // delete reach another listing's files.
             .Where(k => k.StartsWith($"listings/{id}/") || k.StartsWith($"rooms/{id}/"))
@@ -139,6 +145,24 @@ public class ListingService
         {
             try { await _imageService.DeleteAsync(key); }
             catch { /* An orphaned object is harmless; the listing is already gone. */ }
+        }
+    }
+
+    /// <summary>
+    /// Document rows themselves go with the listing via ON DELETE CASCADE. Until the
+    /// ListingDocuments patch has been applied the table does not exist (SQL error 208);
+    /// listing delete must keep working in that case, so there is simply nothing to clean.
+    /// </summary>
+    private async Task<IEnumerable<string>> GetDocumentStorageKeysAsync(int listingId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var documents = await _documentRepo.GetByListingIdAsync(listingId, cancellationToken);
+            return documents.Select(d => d.StorageKey).ToList();
+        }
+        catch (SqlException ex) when (ex.Number == 208)
+        {
+            return [];
         }
     }
 
