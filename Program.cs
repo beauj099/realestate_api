@@ -10,6 +10,10 @@ using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Machine-local overrides for secrets (R2 keys, connection strings). The file
+// is git-ignored; on a server use environment variables (e.g. R2__SecretAccessKey).
+builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
+
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 

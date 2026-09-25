@@ -23,6 +23,20 @@
     <Folder Include="Controllers\" />
   </ItemGroup>
 
+  <!-- Machine-local secrets stay on the machine: never copied into a publish
+       folder, so a developer's keys can't reach the server by accident. -->
+  <ItemGroup>
+    <Content Update="appsettings.Local.json" CopyToPublishDirectory="Never" CopyToOutputDirectory="PreserveNewest" />
+    <Content Update="appsettings.Local.example.json" CopyToPublishDirectory="Never" />
+  </ItemGroup>
+
+  <!-- Separate one-off tools with their own projects; not part of the API. -->
+  <ItemGroup>
+    <Compile Remove="tools/**" />
+    <Content Remove="tools/**" />
+    <None Remove="tools/**" />
+  </ItemGroup>
+
   <ItemGroup>
     <None Remove="dotnet-tools.json" />
     <Content Remove="dotnet-tools.json" />
