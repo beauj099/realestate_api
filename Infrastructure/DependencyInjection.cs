@@ -48,6 +48,7 @@ public static class DependencyInjection
         services.AddScoped<ListingValuationRepository>();
         services.AddScoped<PropertyRunningCostsRepository>();
         services.AddScoped<ListingRoomRepository>();
+        services.AddScoped<ListingRoomPhotoRepository>();
         services.AddScoped<ListingParkingRepository>();
         services.AddScoped<ContactRepository>();
         services.AddScoped<ListingPhotoRepository>();

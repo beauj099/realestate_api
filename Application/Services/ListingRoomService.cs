@@ -9,8 +9,11 @@ namespace RealEstateApi.Application.Services;
 
 public class ListingRoomService
 {
+    public const int MaxPhotosPerRoom = 20;
+
     private readonly ListingRepository _listingRepo;
     private readonly ListingRoomRepository _roomRepo;
+    private readonly ListingRoomPhotoRepository _roomPhotoRepo;
     private readonly IImageStorage _imageService;
     private readonly IOptions<R2Options> _r2Options;
     private readonly IMapper _mapper;
@@ -18,12 +21,14 @@ public class ListingRoomService
     public ListingRoomService(
         ListingRepository listingRepo,
         ListingRoomRepository roomRepo,
+        ListingRoomPhotoRepository roomPhotoRepo,
         IImageStorage imageService,
         IOptions<R2Options> r2Options,
         IMapper mapper)
     {
         _listingRepo = listingRepo;
         _roomRepo = roomRepo;
+        _roomPhotoRepo = roomPhotoRepo;
         _imageService = imageService;
         _r2Options = r2Options;
         _mapper = mapper;
@@ -34,7 +39,7 @@ public class ListingRoomService
         var listing = await _listingRepo.GetOwnedByIdAsync(listingId, userId, isAdmin, cancellationToken);
         if (listing == null) throw new KeyNotFoundException($"Listing {listingId} not found");
 
-        return await RoomDtoBuilder.BuildAsync(_roomRepo, _mapper, listingId, cancellationToken);
+        return await RoomDtoBuilder.BuildAsync(_roomRepo, _roomPhotoRepo, _mapper, listingId, cancellationToken);
     }
 
     public async Task<RoomDto> CreateRoomAsync(int listingId, CreateRoomRequest request, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
@@ -52,7 +57,7 @@ public class ListingRoomService
         return new RoomDto(
             created.Id, created.ListingId, created.Name, created.RoomTypeId,
             created.RoomTypeOther, created.PhotoUrl, created.CreatedAt, created.UpdatedAt,
-            null, new List<FeatureDto>(), new List<CustomFeatureDto>()
+            null, new List<FeatureDto>(), new List<CustomFeatureDto>(), new List<RoomPhotoDto>()
         );
     }
 
@@ -72,15 +77,17 @@ public class ListingRoomService
         var conditionTask = _roomRepo.GetConditionByRoomIdAsync(updated.Id, cancellationToken);
         var featuresTask = _roomRepo.GetLinkedFeaturesAsync(updated.Id, cancellationToken);
         var customFeaturesTask = _roomRepo.GetCustomFeaturesAsync(updated.Id, cancellationToken);
+        var photosTask = _roomPhotoRepo.GetByRoomIdAsync(updated.Id, cancellationToken);
 
-        await Task.WhenAll(conditionTask, featuresTask, customFeaturesTask);
+        await Task.WhenAll(conditionTask, featuresTask, customFeaturesTask, photosTask);
 
         return new RoomDto(
             updated.Id, updated.ListingId, updated.Name, updated.RoomTypeId,
             updated.RoomTypeOther, updated.PhotoUrl, updated.CreatedAt, updated.UpdatedAt,
             conditionTask.Result is null ? null : _mapper.Map<RoomConditionDto>(conditionTask.Result),
             _mapper.Map<List<FeatureDto>>(featuresTask.Result),
-            _mapper.Map<List<CustomFeatureDto>>(customFeaturesTask.Result)
+            _mapper.Map<List<CustomFeatureDto>>(customFeaturesTask.Result),
+            photosTask.Result.Select(RoomDtoBuilder.ToPhotoDto).ToList()
         );
     }
 
@@ -90,51 +97,122 @@ public class ListingRoomService
         if (listing == null) throw new KeyNotFoundException($"Listing {listingId} not found");
 
         var room = await GetOwnedRoomAsync(listingId, roomId, cancellationToken);
-        await DeleteRoomObjectAsync(listingId, roomId, room.PhotoUrl);
 
+        // Collect the stored objects before the rows go (photo rows cascade with the room).
+        var photos = await _roomPhotoRepo.GetByRoomIdAsync(roomId, cancellationToken);
+        var keys = photos.Select(p => p.StorageKey)
+            .Append(room.PhotoUrl is null ? null : ExtractKeyFromUrl(room.PhotoUrl))
+            .ToList();
+
+        // Database first: if it fails, the room still has all its photos.
         await _roomRepo.DeleteAsync(roomId, cancellationToken);
+
+        await DeleteRoomObjectsAsync(listingId, roomId, keys);
     }
 
-    public async Task<PhotoUploadResponse> UploadPhotoAsync(int listingId, int roomId, Stream fileStream, string fileName, string contentType, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<RoomPhotoDto>> GetPhotosAsync(int listingId, int roomId, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
     {
-        var listing = await _listingRepo.GetOwnedByIdAsync(listingId, userId, isAdmin, cancellationToken);
-        if (listing == null) throw new KeyNotFoundException($"Listing {listingId} not found");
+        await _listingRepo.AssertOwnedAsync(listingId, userId, isAdmin, cancellationToken);
+        await GetOwnedRoomAsync(listingId, roomId, cancellationToken);
 
-        var room = await GetOwnedRoomAsync(listingId, roomId, cancellationToken);
-
-        await DeleteRoomObjectAsync(listingId, roomId, room.PhotoUrl);
-
-        var key = $"rooms/{listingId}/{roomId}/{fileName}";
-        var url = await _imageService.UploadAsync(fileStream, key, contentType);
-        await _roomRepo.UpdatePhotoUrlAsync(roomId, url, cancellationToken);
-
-        return new PhotoUploadResponse(url);
-    }
-
-    public async Task DeletePhotoAsync(int listingId, int roomId, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
-    {
-        var listing = await _listingRepo.GetOwnedByIdAsync(listingId, userId, isAdmin, cancellationToken);
-        if (listing == null) throw new KeyNotFoundException($"Listing {listingId} not found");
-
-        var room = await GetOwnedRoomAsync(listingId, roomId, cancellationToken);
-
-        if (room.PhotoUrl is null) return;
-
-        await DeleteRoomObjectAsync(listingId, roomId, room.PhotoUrl);
-        await _roomRepo.UpdatePhotoUrlAsync(roomId, null, cancellationToken);
+        var photos = await _roomPhotoRepo.GetByRoomIdAsync(roomId, cancellationToken);
+        return photos.Select(RoomDtoBuilder.ToPhotoDto).ToList();
     }
 
     /// <summary>
-    /// Deletes a room's photo from R2, but only when it lives under this room's own
-    /// prefix. Rows written before PhotoUrl was server-only may hold an arbitrary URL,
-    /// and deleting that could remove another listing's file.
+    /// Appends a photo to the room (SortOrder = max + 1) and refreshes the room's cover
+    /// (ListingRoom.PhotoUrl). Throws <see cref="RoomPhotoLimitExceededException"/> when
+    /// the room already has <see cref="MaxPhotosPerRoom"/> photos.
     /// </summary>
-    private async Task DeleteRoomObjectAsync(int listingId, int roomId, string? photoUrl)
+    public async Task<RoomPhotoDto> AddPhotoAsync(int listingId, int roomId, Stream fileStream, string fileName, string contentType, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
     {
-        if (photoUrl is null) return;
-        var key = ExtractKeyFromUrl(photoUrl);
-        if (!key.StartsWith($"rooms/{listingId}/{roomId}/")) return;
-        await _imageService.DeleteAsync(key);
+        await _listingRepo.AssertOwnedAsync(listingId, userId, isAdmin, cancellationToken);
+        await GetOwnedRoomAsync(listingId, roomId, cancellationToken);
+
+        // Cheap pre-check so a full room does not cost an upload; the insert re-checks atomically.
+        if (await _roomPhotoRepo.CountByRoomIdAsync(roomId, cancellationToken) >= MaxPhotosPerRoom)
+            throw new RoomPhotoLimitExceededException(MaxPhotosPerRoom);
+
+        var key = $"rooms/{listingId}/{roomId}/{fileName}";
+        var url = await _imageService.UploadAsync(fileStream, key, contentType, cancellationToken);
+
+        ListingRoomPhoto? created;
+        try
+        {
+            created = await _roomPhotoRepo.TryCreateAsync(roomId, url, key, MaxPhotosPerRoom, cancellationToken);
+        }
+        catch
+        {
+            // No row, so nothing would ever reference or clean up the object.
+            await DeleteRoomObjectsAsync(listingId, roomId, [key]);
+            throw;
+        }
+
+        if (created is null)
+        {
+            // Lost a race with a concurrent upload that filled the room.
+            await DeleteRoomObjectsAsync(listingId, roomId, [key]);
+            throw new RoomPhotoLimitExceededException(MaxPhotosPerRoom);
+        }
+
+        return RoomDtoBuilder.ToPhotoDto(created);
+    }
+
+    public async Task DeletePhotoAsync(int listingId, int roomId, int photoId, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
+    {
+        await _listingRepo.AssertOwnedAsync(listingId, userId, isAdmin, cancellationToken);
+        await GetOwnedRoomAsync(listingId, roomId, cancellationToken);
+
+        var photo = await _roomPhotoRepo.GetByIdAsync(photoId, cancellationToken);
+        if (photo is null || photo.ListingRoomId != roomId
+            || !await _roomPhotoRepo.DeleteAsync(photoId, roomId, cancellationToken))
+            throw new KeyNotFoundException($"Photo {photoId} not found under room {roomId}");
+
+        await DeleteRoomObjectsAsync(listingId, roomId, [photo.StorageKey]);
+    }
+
+    /// <summary>
+    /// Legacy single-photo upload (POST {roomId}/photo, older app builds): now appends
+    /// to the room's photos like <see cref="AddPhotoAsync"/>, cap included.
+    /// </summary>
+    public async Task<PhotoUploadResponse> UploadPhotoAsync(int listingId, int roomId, Stream fileStream, string fileName, string contentType, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
+    {
+        var created = await AddPhotoAsync(listingId, roomId, fileStream, fileName, contentType, userId, isAdmin, cancellationToken);
+        return new PhotoUploadResponse(created.Url);
+    }
+
+    /// <summary>
+    /// Legacy single-photo delete (DELETE {roomId}/photo, older app builds): removes all
+    /// of the room's photos and clears the cover.
+    /// </summary>
+    public async Task DeleteAllPhotosAsync(int listingId, int roomId, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
+    {
+        await _listingRepo.AssertOwnedAsync(listingId, userId, isAdmin, cancellationToken);
+        var room = await GetOwnedRoomAsync(listingId, roomId, cancellationToken);
+
+        var deleted = await _roomPhotoRepo.DeleteAllForRoomAsync(roomId, cancellationToken);
+
+        // The cover may predate the photos table (not yet backfilled), so clean it up too.
+        var keys = deleted.Select(p => p.StorageKey)
+            .Append(room.PhotoUrl is null ? null : ExtractKeyFromUrl(room.PhotoUrl))
+            .ToList();
+        await DeleteRoomObjectsAsync(listingId, roomId, keys);
+    }
+
+    /// <summary>
+    /// Best-effort removal of a room's stored photos, only for keys under this room's
+    /// own prefix. Rows written before PhotoUrl was server-only (or backfilled with a
+    /// NULL key) may point anywhere, and deleting that could remove another listing's
+    /// file. A failed delete only leaves a harmless orphan; the rows are already gone.
+    /// </summary>
+    private async Task DeleteRoomObjectsAsync(int listingId, int roomId, IEnumerable<string?> keys)
+    {
+        var prefix = $"rooms/{listingId}/{roomId}/";
+        foreach (var key in keys.OfType<string>().Where(k => k.StartsWith(prefix)).Distinct())
+        {
+            try { await _imageService.DeleteAsync(key, CancellationToken.None); }
+            catch { /* best effort */ }
+        }
     }
 
     private string ExtractKeyFromUrl(string photoUrl)
@@ -238,3 +316,7 @@ public class ListingRoomService
         return room;
     }
 }
+
+/// <summary>The room already holds <see cref="ListingRoomService.MaxPhotosPerRoom"/> photos; mapped to a 400 by the controller.</summary>
+public sealed class RoomPhotoLimitExceededException(int max)
+    : Exception($"A room can have at most {max} photos.");

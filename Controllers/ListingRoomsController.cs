@@ -40,52 +40,92 @@ public class ListingRoomsController : ControllerBase
         return CreatedAtAction(nameof(GetAll), new { listingId }, result);
     }
 
-    [HttpPost("{roomId}/photo")]
-    public async Task<IActionResult> UploadPhoto(int listingId, int roomId, IFormFile file, CancellationToken cancellationToken)
+    private static BadRequestObjectResult FileValidationError(string message) =>
+        new(new ValidationProblemDetails(new Dictionary<string, string[]>
+        {
+            ["file"] = [message]
+        })
+        {
+            Type = "https://httpstatuses.io/400",
+            Title = "Validation failed"
+        });
+
+    /// <summary>Shared checks for room photo uploads; null when the file is acceptable.</summary>
+    private static BadRequestObjectResult? ValidatePhoto(IFormFile? file)
     {
         if (file is null || file.Length == 0)
-            return BadRequest(new ValidationProblemDetails(new Dictionary<string, string[]>
-            {
-                ["file"] = ["A file is required."]
-            })
-            {
-                Type = "https://httpstatuses.io/400",
-                Title = "Validation failed"
-            });
+            return FileValidationError("A file is required.");
 
         var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".webp" };
         var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
         if (!allowedExtensions.Contains(ext))
-            return BadRequest(new ValidationProblemDetails(new Dictionary<string, string[]>
-            {
-                ["file"] = ["Only .jpg, .jpeg, .png, .webp files are allowed."]
-            })
-            {
-                Type = "https://httpstatuses.io/400",
-                Title = "Validation failed"
-            });
+            return FileValidationError("Only .jpg, .jpeg, .png, .webp files are allowed.");
 
         if (file.Length > 5 * 1024 * 1024)
-            return BadRequest(new ValidationProblemDetails(new Dictionary<string, string[]>
-            {
-                ["file"] = ["File size must not exceed 5 MB."]
-            })
-            {
-                Type = "https://httpstatuses.io/400",
-                Title = "Validation failed"
-            });
+            return FileValidationError("File size must not exceed 5 MB.");
 
-        var uniqueName = $"{Guid.NewGuid()}{ext}";
+        return null;
+    }
 
-        await using var stream = file.OpenReadStream();
-        var result = await _roomService.UploadPhotoAsync(listingId, roomId, stream, uniqueName, file.ContentType, CurrentUserId(), IsAdmin(), cancellationToken);
+    // Room photos (up to ListingRoomService.MaxPhotosPerRoom per room)
+    [HttpGet("{roomId}/photos")]
+    public async Task<IActionResult> GetPhotos(int listingId, int roomId, CancellationToken cancellationToken)
+    {
+        var result = await _roomService.GetPhotosAsync(listingId, roomId, CurrentUserId(), IsAdmin(), cancellationToken);
         return Ok(result);
     }
 
+    [HttpPost("{roomId}/photos")]
+    public async Task<IActionResult> AddPhoto(int listingId, int roomId, IFormFile file, CancellationToken cancellationToken)
+    {
+        if (ValidatePhoto(file) is { } invalid) return invalid;
+
+        var uniqueName = $"{Guid.NewGuid()}{Path.GetExtension(file.FileName).ToLowerInvariant()}";
+
+        try
+        {
+            await using var stream = file.OpenReadStream();
+            var result = await _roomService.AddPhotoAsync(listingId, roomId, stream, uniqueName, file.ContentType, CurrentUserId(), IsAdmin(), cancellationToken);
+            return StatusCode(StatusCodes.Status201Created, result);
+        }
+        catch (RoomPhotoLimitExceededException ex)
+        {
+            return FileValidationError(ex.Message);
+        }
+    }
+
+    [HttpDelete("{roomId}/photos/{photoId}")]
+    public async Task<IActionResult> DeletePhotoById(int listingId, int roomId, int photoId, CancellationToken cancellationToken)
+    {
+        await _roomService.DeletePhotoAsync(listingId, roomId, photoId, CurrentUserId(), IsAdmin(), cancellationToken);
+        return NoContent();
+    }
+
+    /// <summary>Legacy single-photo upload for older app builds: appends a photo (cap applies) and returns its URL.</summary>
+    [HttpPost("{roomId}/photo")]
+    public async Task<IActionResult> UploadPhoto(int listingId, int roomId, IFormFile file, CancellationToken cancellationToken)
+    {
+        if (ValidatePhoto(file) is { } invalid) return invalid;
+
+        var uniqueName = $"{Guid.NewGuid()}{Path.GetExtension(file.FileName).ToLowerInvariant()}";
+
+        try
+        {
+            await using var stream = file.OpenReadStream();
+            var result = await _roomService.UploadPhotoAsync(listingId, roomId, stream, uniqueName, file.ContentType, CurrentUserId(), IsAdmin(), cancellationToken);
+            return Ok(result);
+        }
+        catch (RoomPhotoLimitExceededException ex)
+        {
+            return FileValidationError(ex.Message);
+        }
+    }
+
+    /// <summary>Legacy single-photo delete for older app builds: removes all of the room's photos.</summary>
     [HttpDelete("{roomId}/photo")]
     public async Task<IActionResult> DeletePhoto(int listingId, int roomId, CancellationToken cancellationToken)
     {
-        await _roomService.DeletePhotoAsync(listingId, roomId, CurrentUserId(), IsAdmin(), cancellationToken);
+        await _roomService.DeleteAllPhotosAsync(listingId, roomId, CurrentUserId(), IsAdmin(), cancellationToken);
         return NoContent();
     }
 
@@ -108,6 +148,16 @@ public class ListingRoomsController : ControllerBase
     [HttpPut("{roomId}/condition")]
     public async Task<IActionResult> UpsertCondition(int listingId, int roomId, [FromBody] UpsertRoomConditionRequest request, CancellationToken cancellationToken)
     {
+        if (request.Score is < 0 or > 10)
+            return BadRequest(new ValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["score"] = ["Score must be between 0 and 10."]
+            })
+            {
+                Type = "https://httpstatuses.io/400",
+                Title = "Validation failed"
+            });
+
         var result = await _roomService.UpsertConditionAsync(listingId, roomId, request, CurrentUserId(), IsAdmin(), cancellationToken);
         return Ok(result);
     }

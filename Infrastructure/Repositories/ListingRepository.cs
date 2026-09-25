@@ -14,7 +14,7 @@ public class ListingRepository
         _connectionFactory = connectionFactory;
     }
 
-    private const string Columns = "Id, ReferenceNumber, P24Ref, PropertyTypeId, ListingValuationId, ListDate, Status, UserId, CreatedAt, UpdatedAt";
+    private const string Columns = "Id, ReferenceNumber, P24Ref, PropertyTypeId, ListingValuationId, ListDate, Status, UserId, CreatedAt, UpdatedAt, HouseScore, HouseScoreIsManual";
 
     /// <summary>
     /// The @UserId filter value for owner-scoped queries: null for admins (full view),
@@ -81,8 +81,9 @@ public class ListingRepository
     }
 
     /// <summary>
-    /// Card-ready summaries: address, first owner, primary photo and room count
-    /// via LEFT JOINs so listings without them still come back.
+    /// Card-ready summaries: address, first owner, primary photo and room count via
+    /// LEFT JOINs/subqueries so listings without them still come back, plus the stored
+    /// house score.
     /// </summary>
     public async Task<IEnumerable<RealEstateApi.Application.DTOs.ListingSummaryDto>> GetSummariesAsync(string? status, DateTime? dateFrom, DateTime? dateTo, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
     {
@@ -93,7 +94,9 @@ public class ListingRepository
             "a.StreetNumber, a.Street, a.Suburb, a.City, " +
             "(SELECT TOP 1 FullName FROM Contact WHERE ListingId = l.Id ORDER BY FullName) AS PrimaryOwnerName, " +
             "(SELECT TOP 1 Url FROM ListingPhoto WHERE ListingId = l.Id AND IsPrimary = 1) AS PrimaryPhotoUrl, " +
-            "(SELECT COUNT(*) FROM ListingRoom WHERE ListingId = l.Id) AS RoomCount " +
+            "(SELECT COUNT(*) FROM ListingRoom WHERE ListingId = l.Id) AS RoomCount, " +
+            // Must stay the last columns, in this order: Dapper binds ListingSummaryDto by constructor order.
+            "l.HouseScore, l.HouseScoreIsManual " +
             "FROM Listings l LEFT JOIN ListingAddress a ON a.ListingId = l.Id " +
             "WHERE (@Status IS NULL OR l.Status = @Status) AND (@DateFrom IS NULL OR l.CreatedAt >= @DateFrom) AND (@DateTo IS NULL OR l.CreatedAt <= @DateTo) " +
             "AND (@UserId IS NULL OR l.UserId = @UserId) " +
@@ -245,6 +248,21 @@ public class ListingRepository
         }
 
         transaction.Commit();
+    }
+
+    /// <summary>
+    /// Stores the app/agent-set house score (percentage) on an owned listing.
+    /// False when the listing does not exist or is not the caller's.
+    /// </summary>
+    public async Task<bool> UpdateHouseScoreAsync(int id, decimal? score, bool isManual, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        var command = new CommandDefinition(
+            "UPDATE Listings SET HouseScore = @Score, HouseScoreIsManual = @IsManual, UpdatedAt = GETUTCDATE() " +
+            "WHERE Id = @Id AND (@UserId IS NULL OR UserId = @UserId)",
+            new { Id = id, Score = score, IsManual = isManual, UserId = OwnerFilter(userId, isAdmin) },
+            cancellationToken: cancellationToken);
+        return await connection.ExecuteAsync(command) > 0;
     }
 
     public async Task<Listing?> SubmitAsync(int id, CancellationToken cancellationToken = default)

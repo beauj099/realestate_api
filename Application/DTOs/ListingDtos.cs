@@ -19,7 +19,10 @@ public record ListingSummaryDto(
     string? City = null,
     string? PrimaryOwnerName = null,
     string? PrimaryPhotoUrl = null,
-    int RoomCount = 0
+    int RoomCount = 0,
+    // Stored Listings.HouseScore: a percentage (0-100) set by the app/agent; null until scored.
+    decimal? HouseScore = null,
+    bool HouseScoreIsManual = false
 );
 
 public record ListingResponse(
@@ -39,7 +42,12 @@ public record ListingResponse(
     List<RoomDto> Rooms,
     List<ParkingDto> Parking,
     List<ContactDto> Contacts,
-    List<OutdoorFeatureDto> OutdoorFeatures
+    List<OutdoorFeatureDto> OutdoorFeatures,
+    decimal? HouseScore = null,
+    bool HouseScoreIsManual = false
 );
+
+/// <summary>PUT /api/listings/{id}/house-score. Score is a percentage (0-100); null clears it.</summary>
+public record UpdateHouseScoreRequest(decimal? Score, bool IsManual);
 
 public record ListingFilterRequest(string? Status, DateTime? DateFrom, DateTime? DateTo);

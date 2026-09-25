@@ -73,6 +73,23 @@ public class ListingsController : ControllerBase
         return Ok(result);
     }
 
+    [HttpPut("{id}/house-score")]
+    public async Task<IActionResult> UpdateHouseScore(int id, [FromBody] UpdateHouseScoreRequest request, CancellationToken cancellationToken)
+    {
+        if (request.Score is < 0 or > 100)
+            return BadRequest(new ValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["score"] = ["Score must be between 0 and 100."]
+            })
+            {
+                Type = "https://httpstatuses.io/400",
+                Title = "Validation failed"
+            });
+
+        await _listingService.UpdateHouseScoreAsync(id, request, CurrentUserId(), IsAdmin(), cancellationToken);
+        return NoContent();
+    }
+
     // Address
     [HttpGet("{id}/address")]
     public async Task<IActionResult> GetAddress(int id, CancellationToken cancellationToken)
