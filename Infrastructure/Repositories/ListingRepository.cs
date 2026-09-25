@@ -14,7 +14,10 @@ public class ListingRepository
         _connectionFactory = connectionFactory;
     }
 
-    private const string Columns = "Id, ReferenceNumber, P24Ref, PropertyTypeId, ListingValuationId, ListDate, Status, UserId, CreatedAt, UpdatedAt, HouseScore, HouseScoreIsManual";
+    private const string Columns = "Id, ReferenceNumber, P24Ref, PropertyTypeId, ListingValuationId, ListDate, Status, UserId, CreatedAt, UpdatedAt, HouseScore, HouseScoreIsManual, ArchivedAt";
+
+    /// <summary>A contact's display name: its FullName, or its CompanyName when FullName is blank.</summary>
+    private const string ContactDisplayName = "COALESCE(NULLIF(LTRIM(RTRIM(FullName)), ''), CompanyName)";
 
     /// <summary>
     /// The @UserId filter value for owner-scoped queries: null for admins (full view),
@@ -92,11 +95,13 @@ public class ListingRepository
         var command = new CommandDefinition(
             "SELECT l.Id, l.ReferenceNumber, l.P24Ref, l.PropertyTypeId, l.ListingValuationId, l.ListDate, l.Status, l.CreatedAt, l.UpdatedAt, " +
             "a.StreetNumber, a.Street, a.Suburb, a.City, " +
-            "(SELECT TOP 1 FullName FROM Contact WHERE ListingId = l.Id ORDER BY FullName) AS PrimaryOwnerName, " +
+            // The first contact captured (lowest Id) is the primary owner.
+            $"(SELECT TOP 1 {ContactDisplayName} FROM Contact WHERE ListingId = l.Id ORDER BY Id) AS PrimaryOwnerName, " +
             "(SELECT TOP 1 Url FROM ListingPhoto WHERE ListingId = l.Id AND IsPrimary = 1) AS PrimaryPhotoUrl, " +
             "(SELECT COUNT(*) FROM ListingRoom WHERE ListingId = l.Id) AS RoomCount, " +
             // Must stay the last columns, in this order: Dapper binds ListingSummaryDto by constructor order.
-            "l.HouseScore, l.HouseScoreIsManual " +
+            "l.HouseScore, l.HouseScoreIsManual, l.ArchivedAt, " +
+            $"(SELECT STRING_AGG(CAST({ContactDisplayName} AS NVARCHAR(MAX)), '|') WITHIN GROUP (ORDER BY Id) FROM Contact WHERE ListingId = l.Id) AS OwnerNames " +
             "FROM Listings l LEFT JOIN ListingAddress a ON a.ListingId = l.Id " +
             "WHERE (@Status IS NULL OR l.Status = @Status) AND (@DateFrom IS NULL OR l.CreatedAt >= @DateFrom) AND (@DateTo IS NULL OR l.CreatedAt <= @DateTo) " +
             "AND (@UserId IS NULL OR l.UserId = @UserId) " +
@@ -261,6 +266,21 @@ public class ListingRepository
             "UPDATE Listings SET HouseScore = @Score, HouseScoreIsManual = @IsManual, UpdatedAt = GETUTCDATE() " +
             "WHERE Id = @Id AND (@UserId IS NULL OR UserId = @UserId)",
             new { Id = id, Score = score, IsManual = isManual, UserId = OwnerFilter(userId, isAdmin) },
+            cancellationToken: cancellationToken);
+        return await connection.ExecuteAsync(command) > 0;
+    }
+
+    /// <summary>
+    /// Archives (ArchivedAt = now, keeping an existing timestamp) or restores (NULL) an owned
+    /// listing. False when the listing does not exist or is not the caller's.
+    /// </summary>
+    public async Task<bool> SetArchivedAsync(int id, bool archived, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        var command = new CommandDefinition(
+            "UPDATE Listings SET ArchivedAt = CASE WHEN @Archived = 1 THEN COALESCE(ArchivedAt, GETUTCDATE()) ELSE NULL END, UpdatedAt = GETUTCDATE() " +
+            "WHERE Id = @Id AND (@UserId IS NULL OR UserId = @UserId)",
+            new { Id = id, Archived = archived, UserId = OwnerFilter(userId, isAdmin) },
             cancellationToken: cancellationToken);
         return await connection.ExecuteAsync(command) > 0;
     }

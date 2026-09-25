@@ -20,7 +20,8 @@ public class ContactRepository
         using var connection = _connectionFactory.CreateConnection();
         var command = new CommandDefinition(
             $"SELECT {Columns} " +
-            "FROM Contact WHERE ListingId = @ListingId ORDER BY FullName",
+            // By Id, not name: the first contact added is the primary owner.
+            "FROM Contact WHERE ListingId = @ListingId ORDER BY Id",
             new { ListingId = listingId }, cancellationToken: cancellationToken);
         return await connection.QueryAsync<Contact>(command);
     }

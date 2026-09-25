@@ -90,6 +90,13 @@ public class ListingsController : ControllerBase
         return NoContent();
     }
 
+    [HttpPut("{id}/archive")]
+    public async Task<IActionResult> SetArchived(int id, [FromBody] ArchiveListingRequest request, CancellationToken cancellationToken)
+    {
+        await _listingService.SetArchivedAsync(id, request, CurrentUserId(), IsAdmin(), cancellationToken);
+        return NoContent();
+    }
+
     // Address
     [HttpGet("{id}/address")]
     public async Task<IActionResult> GetAddress(int id, CancellationToken cancellationToken)

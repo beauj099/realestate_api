@@ -18,4 +18,7 @@ public class Listing
 
     /// <summary>True when the agent overrode the app's suggested house score by hand.</summary>
     public bool HouseScoreIsManual { get; set; }
+
+    /// <summary>When the agent archived the listing (UTC). Null while the listing is active.</summary>
+    public DateTime? ArchivedAt { get; set; }
 }

@@ -191,6 +191,13 @@ public class ListingService
             throw new KeyNotFoundException($"Listing {id} not found");
     }
 
+    /// <summary>Archives or restores a listing; 404 (KeyNotFoundException) when the listing is not the caller's.</summary>
+    public async Task SetArchivedAsync(int id, ArchiveListingRequest request, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
+    {
+        if (!await _listingRepo.SetArchivedAsync(id, request.Archived, userId, isAdmin, cancellationToken))
+            throw new KeyNotFoundException($"Listing {id} not found");
+    }
+
     public async Task<ListingResponse?> SubmitAsync(int id, CancellationToken cancellationToken = default)
     {
         var listing = await _listingRepo.SubmitAsync(id, cancellationToken);
@@ -288,7 +295,8 @@ public class ListingService
             _mapper.Map<List<ContactDto>>(contactsTask.Result),
             _mapper.Map<List<OutdoorFeatureDto>>(outdoorFeaturesTask.Result),
             listing.HouseScore,
-            listing.HouseScoreIsManual
+            listing.HouseScoreIsManual,
+            listing.ArchivedAt
         );
     }
 }

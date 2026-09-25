@@ -363,3 +363,6 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# Machine-local secrets (R2 keys etc.) -- never commit.
+appsettings.Local.json

@@ -23,6 +23,13 @@
     <Folder Include="Controllers\" />
   </ItemGroup>
 
+  <!-- Separate one-off tools with their own projects; not part of the API. -->
+  <ItemGroup>
+    <Compile Remove="tools/**" />
+    <Content Remove="tools/**" />
+    <None Remove="tools/**" />
+  </ItemGroup>
+
   <ItemGroup>
     <None Remove="dotnet-tools.json" />
     <Content Remove="dotnet-tools.json" />

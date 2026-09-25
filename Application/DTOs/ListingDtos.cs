@@ -22,7 +22,12 @@ public record ListingSummaryDto(
     int RoomCount = 0,
     // Stored Listings.HouseScore: a percentage (0-100) set by the app/agent; null until scored.
     decimal? HouseScore = null,
-    bool HouseScoreIsManual = false
+    bool HouseScoreIsManual = false,
+    // Set when the agent archived the listing; null while active.
+    DateTime? ArchivedAt = null,
+    // Every contact's display name (FullName, else CompanyName) ordered by contact Id,
+    // joined with '|'. Null when the listing has no contacts.
+    string? OwnerNames = null
 );
 
 public record ListingResponse(
@@ -44,10 +49,14 @@ public record ListingResponse(
     List<ContactDto> Contacts,
     List<OutdoorFeatureDto> OutdoorFeatures,
     decimal? HouseScore = null,
-    bool HouseScoreIsManual = false
+    bool HouseScoreIsManual = false,
+    DateTime? ArchivedAt = null
 );
 
 /// <summary>PUT /api/listings/{id}/house-score. Score is a percentage (0-100); null clears it.</summary>
 public record UpdateHouseScoreRequest(decimal? Score, bool IsManual);
+
+/// <summary>PUT /api/listings/{id}/archive. True archives (keeping an existing ArchivedAt), false restores.</summary>
+public record ArchiveListingRequest(bool Archived);
 
 public record ListingFilterRequest(string? Status, DateTime? DateFrom, DateTime? DateTo);

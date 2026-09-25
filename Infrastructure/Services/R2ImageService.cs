@@ -1,3 +1,4 @@
+using Amazon.Runtime;
 using Amazon.S3;
 using Amazon.S3.Model;
 using Microsoft.Extensions.Options;
@@ -20,7 +21,12 @@ public class R2ImageService : IImageStorage, IDisposable
         var config = new AmazonS3Config
         {
             ServiceURL = _options.Endpoint,
-            ForcePathStyle = true
+            ForcePathStyle = true,
+            // R2 rejects the checksum trailers AWSSDK.S3 4.x sends by default
+            // ("STREAMING-UNSIGNED-PAYLOAD-TRAILER not implemented"); only send
+            // checksums when an operation requires them.
+            RequestChecksumCalculation = RequestChecksumCalculation.WHEN_REQUIRED,
+            ResponseChecksumValidation = ResponseChecksumValidation.WHEN_REQUIRED
         };
         return new AmazonS3Client(_options.AccessKeyId, _options.SecretAccessKey, config);
     }
@@ -33,7 +39,10 @@ public class R2ImageService : IImageStorage, IDisposable
             Key = fileName,
             InputStream = fileStream,
             ContentType = contentType,
-            AutoCloseStream = false
+            AutoCloseStream = false,
+            // Cloudflare's documented settings for R2 uploads from .NET.
+            DisablePayloadSigning = true,
+            DisableDefaultChecksumValidation = true
         };
 
         var response = await _s3Client.Value.PutObjectAsync(request, cancellationToken);
