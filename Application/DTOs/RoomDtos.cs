@@ -25,13 +25,25 @@ public record RoomDto(
     DateTime UpdatedAt,
     RoomConditionDto? Condition,
     List<FeatureDto> Features,
-    List<CustomFeatureDto> CustomFeatures
+    List<CustomFeatureDto> CustomFeatures,
+    // All of the room's photos, ordered by SortOrder then Id. PhotoUrl above is the
+    // cover (the first of these) and is kept for older app builds.
+    List<RoomPhotoDto> Photos
+);
+
+public record RoomPhotoDto(
+    int Id,
+    string Url,
+    int SortOrder,
+    DateTime CreatedAt
 );
 
 public record UpsertRoomConditionRequest(
     decimal? ConditionRating,
     string? Notes,
-    int ConditionCategoryId
+    int ConditionCategoryId,
+    // Agent's overall 0-10 score for the room; averaged into the house score.
+    decimal? Score = null
 );
 
 public record RoomConditionDto(
@@ -39,7 +51,8 @@ public record RoomConditionDto(
     int ListingRoomId,
     decimal? ConditionRating,
     string? Notes,
-    int ConditionCategoryId
+    int ConditionCategoryId,
+    decimal? Score
 );
 
 public record LinkFeatureRequest(int FeatureId);

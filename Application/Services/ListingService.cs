@@ -16,6 +16,7 @@ public class ListingService
     private readonly ListingValuationRepository _valuationRepo;
     private readonly PropertyRunningCostsRepository _runningCostsRepo;
     private readonly ListingRoomRepository _roomRepo;
+    private readonly ListingRoomPhotoRepository _roomPhotoRepo;
     private readonly ListingParkingRepository _parkingRepo;
     private readonly ContactRepository _contactRepo;
     private readonly ListingOutdoorFeatureRepository _outdoorFeatureRepo;
@@ -32,6 +33,7 @@ public class ListingService
         ListingValuationRepository valuationRepo,
         PropertyRunningCostsRepository runningCostsRepo,
         ListingRoomRepository roomRepo,
+        ListingRoomPhotoRepository roomPhotoRepo,
         ListingParkingRepository parkingRepo,
         ContactRepository contactRepo,
         ListingOutdoorFeatureRepository outdoorFeatureRepo,
@@ -47,6 +49,7 @@ public class ListingService
         _valuationRepo = valuationRepo;
         _runningCostsRepo = runningCostsRepo;
         _roomRepo = roomRepo;
+        _roomPhotoRepo = roomPhotoRepo;
         _parkingRepo = parkingRepo;
         _contactRepo = contactRepo;
         _outdoorFeatureRepo = outdoorFeatureRepo;
@@ -121,15 +124,19 @@ public class ListingService
     {
         await AssertOwnedAsync(id, userId, isAdmin, cancellationToken);
 
-        // Collect the listing's stored objects (listing photos, room photos and
+        // Collect the listing's stored objects (listing photos, room photos and covers, and
         // documents) before the rows that reference them are gone. Works for both
         // the local "/uploads/..." URLs and the absolute R2 URLs.
         var photos = await _photoRepo.GetByListingIdAsync(id, cancellationToken);
         var rooms = await _roomRepo.GetByListingIdAsync(id, cancellationToken);
+        var roomPhotos = await _roomPhotoRepo.GetByListingIdAsync(id, cancellationToken);
         var documentKeys = await GetDocumentStorageKeysAsync(id, cancellationToken);
         var keys = photos.Select(p => p.Url)
             .Concat(rooms.Where(r => r.PhotoUrl is not null).Select(r => r.PhotoUrl!))
             .Select(ExtractKeyFromUrl)
+            // Room photo rows go with their rooms via ON DELETE CASCADE. A NULL key is a
+            // backfilled legacy URL outside our storage layout, so there is nothing to delete.
+            .Concat(roomPhotos.Where(p => p.StorageKey is not null).Select(p => p.StorageKey!))
             .Concat(documentKeys)
             // Only objects stored under this listing; a stray URL must never let a
             // delete reach another listing's files.
@@ -173,6 +180,15 @@ public class ListingService
             return url[localPrefix.Length..];
         var prefix = _r2Options.Value.PublicUrl.TrimEnd('/') + "/";
         return url.StartsWith(prefix) ? url[prefix.Length..] : url;
+    }
+
+    /// <summary>Stores the house score; 404 (KeyNotFoundException) when the listing is not the caller's.</summary>
+    public async Task UpdateHouseScoreAsync(int id, UpdateHouseScoreRequest request, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
+    {
+        // Two decimals would be silently rounded by DECIMAL(4,1); round explicitly instead.
+        var score = request.Score is { } s ? Math.Round(s, 1, MidpointRounding.AwayFromZero) : (decimal?)null;
+        if (!await _listingRepo.UpdateHouseScoreAsync(id, score, request.IsManual, userId, isAdmin, cancellationToken))
+            throw new KeyNotFoundException($"Listing {id} not found");
     }
 
     public async Task<ListingResponse?> SubmitAsync(int id, CancellationToken cancellationToken = default)
@@ -252,7 +268,7 @@ public class ListingService
         var buildingInfoTask = _buildingInfoRepo.GetByListingIdAsync(id, cancellationToken);
         var valuationTask = _valuationRepo.GetByListingIdAsync(id, cancellationToken);
         var runningCostsTask = _runningCostsRepo.GetByListingIdAsync(id, cancellationToken);
-        var roomsTask = RoomDtoBuilder.BuildAsync(_roomRepo, _mapper, id, cancellationToken);
+        var roomsTask = RoomDtoBuilder.BuildAsync(_roomRepo, _roomPhotoRepo, _mapper, id, cancellationToken);
         var parkingTask = _parkingRepo.GetByListingIdAsync(id, cancellationToken);
         var contactsTask = _contactRepo.GetByListingIdAsync(id, cancellationToken);
         var outdoorFeaturesTask = _outdoorFeatureRepo.GetByListingIdAsync(id, cancellationToken);
@@ -270,7 +286,9 @@ public class ListingService
             roomsTask.Result,
             _mapper.Map<List<ParkingDto>>(parkingTask.Result),
             _mapper.Map<List<ContactDto>>(contactsTask.Result),
-            _mapper.Map<List<OutdoorFeatureDto>>(outdoorFeaturesTask.Result)
+            _mapper.Map<List<OutdoorFeatureDto>>(outdoorFeaturesTask.Result),
+            listing.HouseScore,
+            listing.HouseScoreIsManual
         );
     }
 }

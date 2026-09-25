@@ -88,7 +88,7 @@ public class ListingRoomRepository
     {
         using var connection = _connectionFactory.CreateConnection();
         var command = new CommandDefinition(
-            "SELECT Id, ListingRoomId, ConditionRating, Notes, ConditionCategoryId FROM Condition WHERE ListingRoomId = @ListingRoomId",
+            "SELECT Id, ListingRoomId, ConditionRating, Notes, ConditionCategoryId, Score FROM Condition WHERE ListingRoomId = @ListingRoomId",
             new { ListingRoomId = listingRoomId }, cancellationToken: cancellationToken);
         return await connection.QueryFirstOrDefaultAsync<Condition>(command);
     }
@@ -97,7 +97,7 @@ public class ListingRoomRepository
     {
         using var connection = _connectionFactory.CreateConnection();
         var command = new CommandDefinition(
-            "SELECT c.Id, c.ListingRoomId, c.ConditionRating, c.Notes, c.ConditionCategoryId " +
+            "SELECT c.Id, c.ListingRoomId, c.ConditionRating, c.Notes, c.ConditionCategoryId, c.Score " +
             "FROM Condition c INNER JOIN ListingRoom r ON r.Id = c.ListingRoomId WHERE r.ListingId = @ListingId",
             new { ListingId = listingId }, cancellationToken: cancellationToken);
         return await connection.QueryAsync<Condition>(command);
@@ -108,10 +108,10 @@ public class ListingRoomRepository
         using var connection = _connectionFactory.CreateConnection();
         var command = new CommandDefinition(
             "MERGE Condition AS t USING (SELECT @ListingRoomId AS ListingRoomId) AS s ON t.ListingRoomId = s.ListingRoomId " +
-            "WHEN MATCHED THEN UPDATE SET ConditionRating = @ConditionRating, Notes = @Notes, ConditionCategoryId = @ConditionCategoryId " +
-            "WHEN NOT MATCHED THEN INSERT (ListingRoomId, ConditionRating, Notes, ConditionCategoryId) " +
-            "VALUES (@ListingRoomId, @ConditionRating, @Notes, @ConditionCategoryId) " +
-            "OUTPUT INSERTED.Id, INSERTED.ListingRoomId, INSERTED.ConditionRating, INSERTED.Notes, INSERTED.ConditionCategoryId;",
+            "WHEN MATCHED THEN UPDATE SET ConditionRating = @ConditionRating, Notes = @Notes, ConditionCategoryId = @ConditionCategoryId, Score = @Score " +
+            "WHEN NOT MATCHED THEN INSERT (ListingRoomId, ConditionRating, Notes, ConditionCategoryId, Score) " +
+            "VALUES (@ListingRoomId, @ConditionRating, @Notes, @ConditionCategoryId, @Score) " +
+            "OUTPUT INSERTED.Id, INSERTED.ListingRoomId, INSERTED.ConditionRating, INSERTED.Notes, INSERTED.ConditionCategoryId, INSERTED.Score;",
             condition, cancellationToken: cancellationToken);
         return await connection.QueryFirstOrDefaultAsync<Condition>(command);
     }
