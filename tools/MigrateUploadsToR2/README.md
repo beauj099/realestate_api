@@ -18,6 +18,15 @@ dotnet run --project tools/MigrateUploadsToR2 -- --api-dir "C:\path\to\deployed\
 dotnet run --project tools/MigrateUploadsToR2 -- --api-dir "C:\path\to\deployed\api" --apply
 ```
 
+**No server access needed:** the API serves `/uploads/...` publicly, so the
+tool can download each file from the running API instead of reading the disk.
+Run it from any machine that reaches the database:
+
+```bash
+dotnet run --project tools/MigrateUploadsToR2 -- --api-dir . --source-url https://api.realworth.co.za
+dotnet run --project tools/MigrateUploadsToR2 -- --api-dir . --source-url https://api.realworth.co.za --apply
+```
+
 - **Dry run by default** — reports what it would do, changes nothing.
 - Reads the same settings as the API from `--api-dir` (`appsettings*.json`,
   `appsettings.Local.json`, environment variables). `--uploads <path>`
