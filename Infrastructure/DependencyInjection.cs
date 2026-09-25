@@ -42,6 +42,7 @@ public static class DependencyInjection
     public static IServiceCollection AddRepositories(this IServiceCollection services)
     {
         services.AddScoped<LookupRepository>();
+        services.AddScoped<AgencyRepository>();
         services.AddScoped<ListingRepository>();
         services.AddScoped<ListingAddressRepository>();
         services.AddScoped<ListingBuildingInfoRepository>();
@@ -64,6 +65,7 @@ public static class DependencyInjection
     public static IServiceCollection AddApplicationServices(this IServiceCollection services)
     {
         services.AddScoped<LookupService>();
+        services.AddScoped<AgencyService>();
         services.AddScoped<ListingService>();
         services.AddScoped<ListingRoomService>();
         services.AddScoped<ListingParkingService>();
