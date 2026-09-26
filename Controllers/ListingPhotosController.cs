@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using RealEstateApi.Application.DTOs;
 using RealEstateApi.Application.Services;
 
 namespace RealEstateApi.Controllers;
@@ -72,6 +73,21 @@ public class ListingPhotosController : ControllerBase
         await using var stream = file.OpenReadStream();
         var result = await _photoService.UploadAsync(listingId, CurrentUserId(), IsAdmin(), stream, uniqueName, file.ContentType, cancellationToken);
         return StatusCode(StatusCodes.Status201Created, result);
+    }
+
+    /// <summary>Saves the photo order (every photo id, main first).</summary>
+    [HttpPut("order")]
+    public async Task<IActionResult> Reorder(int listingId, [FromBody] ReorderPhotosRequest request, CancellationToken cancellationToken)
+    {
+        var ok = await _photoService.ReorderAsync(listingId, CurrentUserId(), IsAdmin(), request.PhotoIds ?? [], cancellationToken);
+        return ok ? NoContent() : BadRequest(new ValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["photoIds"] = ["List every photo exactly once."]
+            })
+            {
+                Type = "https://httpstatuses.io/400",
+                Title = "Validation failed"
+            });
     }
 
     [HttpPut("{photoId}/primary")]

@@ -110,6 +110,14 @@ public class ListingRoomService
         await DeleteRoomObjectsAsync(listingId, roomId, keys);
     }
 
+    /// <summary>Saves the agent's photo order for a room; the first is the cover. False when the ids do not match the room's photos.</summary>
+    public async Task<bool> ReorderPhotosAsync(int listingId, int roomId, IReadOnlyList<int> photoIds, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
+    {
+        await _listingRepo.AssertOwnedAsync(listingId, userId, isAdmin, cancellationToken);
+        await GetOwnedRoomAsync(listingId, roomId, cancellationToken);
+        return await _roomPhotoRepo.ReorderAsync(roomId, photoIds, cancellationToken);
+    }
+
     public async Task<IEnumerable<RoomPhotoDto>> GetPhotosAsync(int listingId, int roomId, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
     {
         await _listingRepo.AssertOwnedAsync(listingId, userId, isAdmin, cancellationToken);
