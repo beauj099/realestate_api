@@ -20,6 +20,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Recorded municipal responses, read by the offline tests. -->
+    <None Include="*.html" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\realestate_api.csproj" />
   </ItemGroup>
 

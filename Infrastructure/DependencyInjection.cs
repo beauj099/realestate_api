@@ -48,9 +48,22 @@ public static class DependencyInjection
         services.AddScoped<global::PropertyData.Johannesburg.JohannesburgPropertyProvider>();
         services.AddScoped<global::PropertyData.Core.IPropertyDataProvider>(sp =>
             sp.GetRequiredService<global::PropertyData.Johannesburg.JohannesburgPropertyProvider>());
-        services.AddScoped<global::PropertyData.Core.IPropertyDataProvider, global::PropertyData.National.NationalCadastreProvider>();
+        services.AddScoped<global::PropertyData.National.NationalCadastreProvider>();
+        services.AddScoped<global::PropertyData.Core.IPropertyDataProvider>(sp =>
+            sp.GetRequiredService<global::PropertyData.National.NationalCadastreProvider>());
+        // Tshwane: the national cadastre for the parcel, the City's roll for its value.
+        services.AddHttpClient<global::PropertyData.Tshwane.TshwaneRollClient>(c =>
+        {
+            c.Timeout = TimeSpan.FromSeconds(30);
+            c.DefaultRequestHeaders.UserAgent.ParseAdd(configuration.GetValue<string>("PropertyData:UserAgent")
+                ?? "RealWorth/1.0 (+https://api.realworth.co.za)");
+        });
+        services.AddScoped<global::PropertyData.Core.IPropertyDataProvider, global::PropertyData.Tshwane.TshwanePropertyProvider>();
         services.Configure<ImageryOptions>(configuration.GetSection(ImageryOptions.SectionName));
         services.AddSingleton<ImageryLinkBuilder>();
+        // Monthly check that every municipal source still answers as expected (emails on failure).
+        services.Configure<DataSourceCheckOptions>(configuration.GetSection(DataSourceCheckOptions.SectionName));
+        services.AddHostedService<MonthlyDataSourceCheck>();
         services.AddHttpClient("imagery", c => c.Timeout = TimeSpan.FromSeconds(20));
 
         return services;
@@ -94,6 +107,7 @@ public static class DependencyInjection
         services.AddScoped<AuthService>();
         services.AddScoped<AgentProfileService>();
         services.AddScoped<AgentComparableService>();
+        services.AddScoped<DataSourceHealthService>();
         services.AddScoped<PropertyReportService>();
 
         return services;

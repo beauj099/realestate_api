@@ -15,7 +15,8 @@ namespace RealEstateApi.Application.Services;
 /// imagery and a second look at the same property never go back to the City.
 ///
 /// Coverage: Cape Town (everything), Johannesburg (values and current sales, no building sizes),
-/// and the national cadastre anywhere else (erf identity and size only, from a GPS pin).
+/// Tshwane (values from its roll, from a GPS pin; no sales), and the national cadastre anywhere
+/// else (erf identity and size only, from a GPS pin).
 /// </summary>
 public class PropertyReportService(
     IEnumerable<IPropertyDataProvider> providers,
@@ -31,6 +32,7 @@ public class PropertyReportService(
     public const string CapeTown = "coct";
     public const string Johannesburg = PropertyData.Johannesburg.JohannesburgPropertyProvider.Municipality;
     public const string National = PropertyData.National.NationalCadastreProvider.Municipality;
+    public const string Tshwane = PropertyData.Tshwane.TshwanePropertyProvider.Municipality;
 
     /// <summary>
     /// A GPS pin goes to each city in turn, then to the national cadastre. An address or erf has
@@ -48,6 +50,11 @@ public class PropertyReportService(
                 refs = await TryResolve(ProviderFor(municipality), query, ct);
                 if (refs.Count > 0) break;
             }
+
+            // A Tshwane parcel (key "GTSH…") also has a value on the City's roll.
+            refs = refs.Select(r => r.Municipality == National && PropertyData.Tshwane.TshwanePropertyProvider.IsTshwaneParcel(r.Sg26)
+                ? r with { Municipality = Tshwane }
+                : r).ToList();
         }
         else
         {
@@ -311,6 +318,10 @@ public class PropertyReportService(
         Johannesburg =>
             "Johannesburg values are from the GV2023 roll (valued as at 1 July 2022). Building sizes are not " +
             "published, so floor area is not filled in and sales are compared by erf size.",
+        Tshwane =>
+            "Tshwane values are from the GV2025 roll (valued as at 1 July 2024, in effect from 1 July 2025). " +
+            "The roll has no sales or building sizes, so there are no municipal comparable sales; sales " +
+            "reported by agents are the comparables here. Erf details are from the national cadastre.",
         National =>
             "Only the national cadastre covers this property: its erf number, size and boundary, from records of " +
             "about 2017. There is no municipal value or sales data for this area yet.",
