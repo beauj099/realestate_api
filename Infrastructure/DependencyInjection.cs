@@ -75,6 +75,7 @@ public static class DependencyInjection
         services.AddScoped<UserRepository>();
         services.AddScoped<RefreshTokenRepository>();
         services.AddScoped<PasswordResetCodeRepository>();
+        services.AddScoped<AgentComparableRepository>();
 
         return services;
     }
@@ -92,6 +93,7 @@ public static class DependencyInjection
         services.AddScoped<ListingOutdoorFeatureService>();
         services.AddScoped<AuthService>();
         services.AddScoped<AgentProfileService>();
+        services.AddScoped<AgentComparableService>();
         services.AddScoped<PropertyReportService>();
 
         return services;

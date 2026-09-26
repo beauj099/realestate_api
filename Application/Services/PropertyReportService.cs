@@ -23,6 +23,7 @@ public class PropertyReportService(
     PropertyData.Johannesburg.JohannesburgPropertyProvider johannesburg,
     IMemoryCache cache,
     ImageryLinkBuilder imagery,
+    AgentComparableService agentComparables,
     ILogger<PropertyReportService> log)
 {
     private static readonly TimeSpan RecordTtl = TimeSpan.FromHours(12);
@@ -142,12 +143,23 @@ public class PropertyReportService(
         System.Globalization.CultureInfo.InvariantCulture.TextInfo.ToTitleCase(s.ToLowerInvariant());
 
     public async Task<PropertyReportDto> GetReportAsync(string municipality, string erf, string? suburb,
-        string? sg26, bool includeComparables, CancellationToken ct)
+        string? sg26, bool includeComparables, int? userId, CancellationToken ct)
     {
         var record = await GetRecordAsync(municipality, erf, suburb, sg26, includeComparables
             ? new RecordOptions()
             : new RecordOptions(IncludeComparables: false), includeComparables ? "full" : "nocomps", ct);
-        return Map(record);
+        var report = Map(record);
+        if (!includeComparables) return report;
+
+        // Sales the City recorded for the area, to check agent-reported ones against. Transfers
+        // for R0 and implausible prices are not sales and would only raise false disputes.
+        var municipalSales = record.Comparables?.All
+            .Where(c => c.Exclusion is not (ComparableExclusion.ZeroPrice or ComparableExclusion.ImplausiblePrice))
+            .Select(c => new MunicipalSale(c.Address, c.Erf, c.SaleDate, c.SalePriceZar))
+            .ToList() ?? [];
+        var agentSales = await agentComparables.ForReportAsync(userId, record.Ref.Municipality, record.Ref.Suburb,
+            municipalSales, record.DataSource, record.DwellingExtentM2, record.BestExtentM2, ct);
+        return report with { AgentComparables = agentSales };
     }
 
     public async Task<string> GetSitePlanSvgAsync(string municipality, string erf, string? suburb, string? sg26,

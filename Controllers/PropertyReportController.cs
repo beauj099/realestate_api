@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RealEstateApi.Application.DTOs;
@@ -72,7 +73,9 @@ public class PropertyReportController : ControllerBase
     {
         try
         {
-            return Ok(await _reports.GetReportAsync(municipality, erf, suburb, sg26, includeComparables, cancellationToken));
+            return Ok(await _reports.GetReportAsync(municipality, erf, suburb, sg26, includeComparables,
+                int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId) ? userId : null,
+                cancellationToken));
         }
         catch (HttpRequestException)
         {

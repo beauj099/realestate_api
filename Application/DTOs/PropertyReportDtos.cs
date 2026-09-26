@@ -91,4 +91,6 @@ public record PropertyReportDto(
     string? ComparablesMethod,
     string? CoverageNote,
     IReadOnlyList<ProvenanceDto> Provenance,
-    string GeneratedAtUtc);
+    string GeneratedAtUtc,
+    // Sales agents reported for the suburb: read per request (never cached with the record).
+    AgentComparablesSummaryDto? AgentComparables = null);
