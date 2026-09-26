@@ -160,6 +160,9 @@ namespace PropertyData.Core.Models
 
         public IReadOnlyList<Provenance> Provenance { get; init; } = [];
 
+        /// <summary>Who published this data, for credits: "City of Cape Town open data".</summary>
+        public string DataSource { get; init; } = "City of Cape Town open data";
+
         public double? BestExtentM2 => ExtentM2Deed ?? ExtentM2Geodesic;
         public double? TotalRoofM2 => Buildings.Count == 0 ? null : Buildings.Sum(b => b.RoofM2);
     }
@@ -364,6 +367,41 @@ namespace PropertyData.CapeTown.Internal
 
         public static bool IsStreetType(string token) => TypeSynonyms.ContainsKey(token);
 
+        /// <summary>What has been typed so far, e.g. "17 pine rd clar".</summary>
+        public sealed record PartialAddress(int? Number, string? Suffix, string Street, string? StreetType, string? Suburb);
+
+        /// <summary>
+        /// Reads a half-typed address for type-ahead: an optional leading number ("17", "12B"),
+        /// street words up to a street type ("RD"), and anything after it as the start of the
+        /// suburb. Null when there is no usable street text yet.
+        /// </summary>
+        public static PartialAddress? ParsePartial(string text)
+        {
+            var tokens = System.Text.RegularExpressions.Regex
+                .Replace(text.ToUpperInvariant(), @"[^A-Z0-9 ]", " ")
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
+            if (tokens.Count == 0) return null;
+
+            int? number = null;
+            string? suffix = null;
+            var numMatch = System.Text.RegularExpressions.Regex.Match(tokens[0], @"^(\d+)([A-Z])?$");
+            if (numMatch.Success)
+            {
+                number = int.Parse(numMatch.Groups[1].Value, CultureInfo.InvariantCulture);
+                suffix = numMatch.Groups[2].Success ? numMatch.Groups[2].Value : null;
+                tokens.RemoveAt(0);
+            }
+            if (tokens.Count == 0) return null;
+
+            var typeAt = tokens.FindIndex(1, IsStreetType);
+            var street = string.Join(' ', typeAt < 0 ? tokens : tokens.Take(typeAt));
+            if (street.Length < 2) return null;
+            return new PartialAddress(
+                number, suffix, street,
+                typeAt < 0 ? null : CanonicalType(tokens[typeAt]),
+                typeAt < 0 ? null : string.Join(' ', tokens.Skip(typeAt + 1)));
+        }
+
         /// <summary>"RD" → "ROAD"; null when the token is not a street type.</summary>
         public static string? CanonicalType(string token) => TypeSynonyms.GetValueOrDefault(token);
 
@@ -563,32 +601,13 @@ namespace PropertyData.CapeTown.Clients
 
         private async Task<List<AddressSuggestion>> SuggestOnceAsync(string text, int limit, CancellationToken ct)
         {
-            var tokens = System.Text.RegularExpressions.Regex
-                .Replace(text.ToUpperInvariant(), @"[^A-Z0-9 ]", " ")
-                .Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
-            if (tokens.Count == 0) return [];
-
-            int? number = null;
-            string? suffix = null;
-            var numMatch = System.Text.RegularExpressions.Regex.Match(tokens[0], @"^(\d+)([A-Z])?$");
-            if (numMatch.Success)
-            {
-                number = int.Parse(numMatch.Groups[1].Value, CultureInfo.InvariantCulture);
-                suffix = numMatch.Groups[2].Success ? numMatch.Groups[2].Value : null;
-                tokens.RemoveAt(0);
-            }
-            if (tokens.Count == 0) return [];
-
-            // Street words run up to a street type ("RD"); anything after it narrows the suburb.
-            var typeAt = tokens.FindIndex(1, t => AddressNormalizer.IsStreetType(t));
-            var street = string.Join(' ', typeAt < 0 ? tokens : tokens.Take(typeAt));
-            var suburb = typeAt < 0 ? null : string.Join(' ', tokens.Skip(typeAt + 1));
-            if (street.Length < 2) return [];
+            if (AddressNormalizer.ParsePartial(text) is not { } typed) return [];
+            var (number, suffix, street, type, suburb) = typed;
 
             var where = new StringBuilder($"STR_NAME LIKE '{AddressNormalizer.SqlLiteral(street)}%'");
             if (number is not null) where.Append($" AND ADR_NO={number}");
             // A typed street type ("RD") narrows to it: "PINE RD" is not "PINETREE AVENUE".
-            if (typeAt >= 0 && AddressNormalizer.CanonicalType(tokens[typeAt]) is { } type)
+            if (type is not null)
                 where.Append($" AND UPPER(LU_STR_NAME_TYPE)='{AddressNormalizer.SqlLiteral(type)}'");
             if (!string.IsNullOrWhiteSpace(suburb))
                 where.Append($" AND OFC_SBRB_NAME LIKE '{AddressNormalizer.SqlLiteral(suburb)}%'");
@@ -1310,8 +1329,8 @@ namespace PropertyData.CapeTown.Services
                 var roof = rec.TotalRoofM2 is null ? "" : string.Create(CultureInfo.InvariantCulture, $"  ·  Buildings {rec.TotalRoofM2:0} m² footprint");
                 var captured = rec.Buildings.FirstOrDefault()?.CapturedYyyyMm;
                 var src = captured is null
-                    ? "Cadastre: City of Cape Town open data"
-                    : $"Cadastre and building footprints: City of Cape Town open data (footprints captured {captured.ToString()![..4]}-{captured.ToString()![4..]})";
+                    ? $"Cadastre: {rec.DataSource}"
+                    : $"Cadastre and building footprints: {rec.DataSource} (footprints captured {captured.ToString()![..4]}-{captured.ToString()![4..]})";
 
                 sb.Append(CultureInfo.InvariantCulture,
                     $"""<text x="{padPx}" y="{ty}" font-size="13" font-weight="bold" fill="{o.TextColor}">{Esc(rec.FormattedAddress)}</text>""");

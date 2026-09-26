@@ -87,5 +87,8 @@ public record PropertyReportDto(
 
     IReadOnlyList<ImageryRefDto> Imagery,
     string SitePlanUrl,
+    string DataSource,
+    string? ComparablesMethod,
+    string? CoverageNote,
     IReadOnlyList<ProvenanceDto> Provenance,
     string GeneratedAtUtc);
