@@ -43,6 +43,8 @@ public class PropertyReportService(
     [
         (PropertyData.Tshwane.TshwanePropertyProvider.ParcelKeyPrefix, Tshwane),
         (PropertyData.MosselBay.MosselBayPropertyProvider.ParcelKeyPrefix, MosselBay),
+        // Rolls read from published PDF books (Drakenstein, …).
+        .. PropertyData.RollBooks.RollBookCatalogue.All.Select(m => (m.ParcelKeyPrefix, m.Municipality)),
     ];
 
     /// <summary>
@@ -343,6 +345,11 @@ public class PropertyReportService(
         National =>
             "Only the national cadastre covers this property: its erf number, size and boundary, from records of " +
             "about 2017. There is no municipal value or sales data for this area yet.",
+        var m when PropertyData.RollBooks.RollBookCatalogue.ForMunicipality(m) is { } book =>
+            $"{book.Name} values are from its {book.RollVersion} roll ({book.PeriodLabel}; valued as at " +
+            $"{book.DateOfValuation:d MMMM yyyy}), read from the roll books the municipality publishes. The roll has no " +
+            "sales or building sizes, so there are no municipal comparable sales; sales reported by agents are the " +
+            "comparables here. Erf boundaries are from the national cadastre.",
         _ => null,
     };
 

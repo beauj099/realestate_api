@@ -21,7 +21,7 @@
 
   <ItemGroup>
     <!-- Recorded municipal responses, read by the offline tests. -->
-    <None Include="*.html" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="*.html;*.pdf" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

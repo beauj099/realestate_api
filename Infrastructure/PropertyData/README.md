@@ -1,4 +1,4 @@
-# Property data (Cape Town, Johannesburg, Tshwane, Mossel Bay, national)
+# Property data (Cape Town, Johannesburg, Tshwane, Mossel Bay, Drakenstein, national)
 
 Address → erf → property record → valuation report, from public City of Cape Town data. No
 credentials needed. Background, endpoint reference and compliance rules:
@@ -10,6 +10,7 @@ credentials needed. Background, endpoint reference and compliance rules:
 | `JohannesburgPropertyData.cs` | City of Johannesburg (values, zoning, last registered sales) and the national cadastre fallback (erf and boundary from a GPS pin) |
 | `TshwanePropertyData.cs` | City of Tshwane: the national cadastre's parcel plus the City's GV2025 roll (value, category, registered size). Pins only; no sales |
 | `MosselBayPropertyData.cs` | Mossel Bay: the national cadastre's parcel plus the municipality's NDK online roll (street address, value, category, size). Pins only; no sales |
+| `RollBookParser.cs`, `RollBookCatalogue.cs`, `RollBookPropertyData.cs` | Rolls published only as PDF books (PenSoft layout; Drakenstein GV2024), imported by `tools/ImportRollBooks` into `dbo.RollBookEntries` and read for pins in those towns |
 | `Application/Services/DataSourceHealthService.cs` | One known property per source; `GET /api/admin/data-sources/health` (Admin) and a monthly run that emails on failure |
 | `PropertyImagery.cs` | Google imagery links and the print rule (satellite printable with attribution, Street View screen-only) |
 | `Application/Services/PropertyReportService.cs` | Caching (12 h in memory: one report = one fetch) and the DTO the app reads |
@@ -60,8 +61,17 @@ Settings (`appsettings.Local.json` or environment variables):
 - **The same NDK host's other rolls are stale**: Metsimaholo (roll 6) serves 2019–2024 and
   Emfuleni (roll 1) 2017–2019, and their erven sit in "EXT nn" townships the cadastre does not
   name. Not used. Metsimaholo's results include a column in SA ID number format.
-- **Most small towns publish their roll only as PDF books** (Drakenstein/Paarl, George, Knysna,
-  Overstrand, …): there the report is the cadastre plus agent-reported sales.
+- **Roll books (PDF) put a space between thousands** ("2 793.2484 Ha", "30 575 000") and the header
+  row does not bound the data (digits sit left of "Extent"; "Including :- …" starts 120 pt left of
+  its header). `RollBookParser` anchors each number on its unit and joins only digit groups a
+  normal space apart. Checked on all of Paarl (24 585 rows) against an independent extraction:
+  no differences. Plain text extraction also runs a street number into the extent ("Bainskloof
+  33 … 803 m²" reads as "33 803 m²").
+- **Consolidated erven**: "5*" is valued for the group ("Including :- Paarl 5, Paarl 7, Paarl 9");
+  members show 0 and "See :- Paarl 5*". An erf "valued under" a sectional scheme ("Note :- See SS
+  The Mews") shows 0 too. Neither 0 is a value; the report says what it is instead.
+- **Other small towns**: George, Knysna, Overstrand … also publish PDFs; add them to
+  `RollBookCatalogue` once their footer says PenSoft (see `tools/ImportRollBooks/README.md`).
 - **Ekurhuleni is not scraped**: its portal states it is for property owners viewing their own
   values. Ask the City for an extract instead.
 

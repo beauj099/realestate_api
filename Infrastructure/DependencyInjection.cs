@@ -67,6 +67,8 @@ public static class DependencyInjection
                 ?? "RealWorth/1.0 (+https://api.realworth.co.za)");
         });
         services.AddScoped<global::PropertyData.Core.IPropertyDataProvider, global::PropertyData.MosselBay.MosselBayPropertyProvider>();
+        // Municipalities with only PDF roll books (Drakenstein…): imported by tools/ImportRollBooks.
+        services.AddScoped<global::PropertyData.Core.IPropertyDataProvider, global::PropertyData.RollBooks.RollBookPropertyProvider>();
         services.Configure<ImageryOptions>(configuration.GetSection(ImageryOptions.SectionName));
         services.AddSingleton<ImageryLinkBuilder>();
         // Monthly check that every municipal source still answers as expected (emails on failure).
@@ -97,6 +99,7 @@ public static class DependencyInjection
         services.AddScoped<RefreshTokenRepository>();
         services.AddScoped<PasswordResetCodeRepository>();
         services.AddScoped<AgentComparableRepository>();
+        services.AddScoped<RollBookRepository>();
 
         return services;
     }
