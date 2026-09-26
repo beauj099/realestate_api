@@ -94,6 +94,21 @@ public class ListingRoomsController : ControllerBase
         }
     }
 
+    /// <summary>Saves the room's photo order (every photo id, cover first).</summary>
+    [HttpPut("{roomId}/photos/order")]
+    public async Task<IActionResult> ReorderPhotos(int listingId, int roomId, [FromBody] ReorderPhotosRequest request, CancellationToken cancellationToken)
+    {
+        var ok = await _roomService.ReorderPhotosAsync(listingId, roomId, request.PhotoIds ?? [], CurrentUserId(), IsAdmin(), cancellationToken);
+        return ok ? NoContent() : BadRequest(new ValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["photoIds"] = ["List every photo exactly once."]
+            })
+            {
+                Type = "https://httpstatuses.io/400",
+                Title = "Validation failed"
+            });
+    }
+
     [HttpDelete("{roomId}/photos/{photoId}")]
     public async Task<IActionResult> DeletePhotoById(int listingId, int roomId, int photoId, CancellationToken cancellationToken)
     {

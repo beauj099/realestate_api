@@ -117,6 +117,40 @@ public class ListingRoomPhotoRepository
         return created;
     }
 
+    /// <summary>
+    /// Applies an agent-chosen order: SortOrder follows <paramref name="photoIds"/>, so the
+    /// first is the cover, and the cover is refreshed. The list must name every photo of
+    /// the room exactly once; returns false (nothing changed) otherwise.
+    /// </summary>
+    public async Task<bool> ReorderAsync(int listingRoomId, IReadOnlyList<int> photoIds, CancellationToken cancellationToken = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        connection.Open();
+        using var transaction = connection.BeginTransaction();
+
+        var existing = (await connection.QueryAsync<int>(new CommandDefinition(
+            "SELECT Id FROM ListingRoomPhotos WITH (UPDLOCK) WHERE ListingRoomId = @ListingRoomId",
+            new { ListingRoomId = listingRoomId }, transaction: transaction, cancellationToken: cancellationToken))).ToHashSet();
+        if (photoIds.Count != existing.Count || photoIds.Distinct().Count() != photoIds.Count || !photoIds.All(existing.Contains))
+        {
+            transaction.Rollback();
+            return false;
+        }
+
+        for (var i = 0; i < photoIds.Count; i++)
+        {
+            await connection.ExecuteAsync(new CommandDefinition(
+                "UPDATE ListingRoomPhotos SET SortOrder = @SortOrder WHERE Id = @Id AND ListingRoomId = @ListingRoomId",
+                new { Id = photoIds[i], ListingRoomId = listingRoomId, SortOrder = i },
+                transaction: transaction, cancellationToken: cancellationToken));
+        }
+        await connection.ExecuteAsync(new CommandDefinition(
+            RefreshCoverSql, new { ListingRoomId = listingRoomId }, transaction: transaction, cancellationToken: cancellationToken));
+
+        transaction.Commit();
+        return true;
+    }
+
     /// <summary>Deletes one photo of the room and refreshes the cover. False when no such photo exists under the room.</summary>
     public async Task<bool> DeleteAsync(int photoId, int listingRoomId, CancellationToken cancellationToken = default)
     {

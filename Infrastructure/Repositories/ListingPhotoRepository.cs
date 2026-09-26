@@ -19,7 +19,9 @@ public class ListingPhotoRepository
     {
         using var connection = _connectionFactory.CreateConnection();
         var command = new CommandDefinition(
-            $"SELECT {Columns} FROM ListingPhoto WHERE ListingId = @ListingId ORDER BY SortOrder ASC, Id ASC",
+            // The primary photo first, so older data (primary set without reordering) still
+            // shows its main photo first.
+            $"SELECT {Columns} FROM ListingPhoto WHERE ListingId = @ListingId ORDER BY IsPrimary DESC, SortOrder ASC, Id ASC",
             new { ListingId = listingId }, cancellationToken: cancellationToken);
         return await connection.QueryAsync<ListingPhoto>(command);
     }
@@ -76,6 +78,38 @@ public class ListingPhotoRepository
             throw new KeyNotFoundException($"Photo {photoId} not found under listing {listingId}");
 
         transaction.Commit();
+    }
+
+    /// <summary>
+    /// Applies an agent-chosen order: SortOrder follows <paramref name="photoIds"/> and the
+    /// first becomes the primary photo. The list must name every photo of the listing
+    /// exactly once; returns false (nothing changed) otherwise.
+    /// </summary>
+    public async Task<bool> ReorderAsync(int listingId, IReadOnlyList<int> photoIds, CancellationToken cancellationToken = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        connection.Open();
+        using var transaction = connection.BeginTransaction();
+
+        var existing = (await connection.QueryAsync<int>(new CommandDefinition(
+            "SELECT Id FROM ListingPhoto WITH (UPDLOCK) WHERE ListingId = @ListingId",
+            new { ListingId = listingId }, transaction: transaction, cancellationToken: cancellationToken))).ToHashSet();
+        if (photoIds.Count != existing.Count || photoIds.Distinct().Count() != photoIds.Count || !photoIds.All(existing.Contains))
+        {
+            transaction.Rollback();
+            return false;
+        }
+
+        for (var i = 0; i < photoIds.Count; i++)
+        {
+            await connection.ExecuteAsync(new CommandDefinition(
+                "UPDATE ListingPhoto SET SortOrder = @SortOrder, IsPrimary = @IsPrimary WHERE Id = @Id AND ListingId = @ListingId",
+                new { Id = photoIds[i], ListingId = listingId, SortOrder = i, IsPrimary = i == 0 },
+                transaction: transaction, cancellationToken: cancellationToken));
+        }
+
+        transaction.Commit();
+        return true;
     }
 
     public async Task DeleteAsync(int photoId, CancellationToken cancellationToken = default)

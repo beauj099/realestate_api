@@ -51,6 +51,13 @@ public class ListingPhotoService
         await _photoRepo.SetPrimaryAsync(listingId, photoId, cancellationToken);
     }
 
+    /// <summary>Saves the agent's photo order; the first is the main photo. False when the ids do not match the listing's photos.</summary>
+    public async Task<bool> ReorderAsync(int listingId, int? userId, bool isAdmin, IReadOnlyList<int> photoIds, CancellationToken cancellationToken = default)
+    {
+        await _listingRepo.AssertOwnedAsync(listingId, userId, isAdmin, cancellationToken);
+        return await _photoRepo.ReorderAsync(listingId, photoIds, cancellationToken);
+    }
+
     public async Task DeleteAsync(int listingId, int photoId, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
     {
         await _listingRepo.AssertOwnedAsync(listingId, userId, isAdmin, cancellationToken);
