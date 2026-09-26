@@ -24,12 +24,15 @@ public sealed class DataSourceHealthTests
         services.AddScoped<NationalCadastreProvider>();
         services.AddHttpClient<TshwaneRollClient>(c => c.DefaultRequestHeaders.UserAgent.ParseAdd("RealWorth-Tests/1.0"));
         services.AddScoped<IPropertyDataProvider, TshwanePropertyProvider>();
+        services.AddMemoryCache();
+        services.AddHttpClient<PropertyData.MosselBay.NdkRollClient>(c => c.DefaultRequestHeaders.UserAgent.ParseAdd("RealWorth-Tests/1.0"));
+        services.AddScoped<IPropertyDataProvider, PropertyData.MosselBay.MosselBayPropertyProvider>();
         services.AddScoped<DataSourceHealthService>();
         await using var sp = services.BuildServiceProvider();
 
         var results = await sp.GetRequiredService<DataSourceHealthService>().RunAsync(CancellationToken.None);
 
-        results.Select(r => r.Source).Should().HaveCount(3);
+        results.Select(r => r.Source).Should().HaveCount(4);
         results.Where(r => !r.Ok).Should().BeEmpty();
     }
 }

@@ -1,4 +1,4 @@
-# Property data (Cape Town, Johannesburg, Tshwane, national)
+# Property data (Cape Town, Johannesburg, Tshwane, Mossel Bay, national)
 
 Address → erf → property record → valuation report, from public City of Cape Town data. No
 credentials needed. Background, endpoint reference and compliance rules:
@@ -9,6 +9,7 @@ credentials needed. Background, endpoint reference and compliance rules:
 | `CapeTownPropertyData.cs` | The adapter: models, address normaliser, geodesy, ArcGIS client, valuation-roll scraper, comparable analyzer, SVG site plan, provider, DI (`AddCapeTownPropertyData`) |
 | `JohannesburgPropertyData.cs` | City of Johannesburg (values, zoning, last registered sales) and the national cadastre fallback (erf and boundary from a GPS pin) |
 | `TshwanePropertyData.cs` | City of Tshwane: the national cadastre's parcel plus the City's GV2025 roll (value, category, registered size). Pins only; no sales |
+| `MosselBayPropertyData.cs` | Mossel Bay: the national cadastre's parcel plus the municipality's NDK online roll (street address, value, category, size). Pins only; no sales |
 | `Application/Services/DataSourceHealthService.cs` | One known property per source; `GET /api/admin/data-sources/health` (Admin) and a monthly run that emails on failure |
 | `PropertyImagery.cs` | Google imagery links and the print rule (satellite printable with attribution, Street View screen-only) |
 | `Application/Services/PropertyReportService.cs` | Caching (12 h in memory: one report = one fetch) and the DTO the app reads |
@@ -53,6 +54,14 @@ Settings (`appsettings.Local.json` or environment variables):
   value, never a price. The roll has no addresses (resolve by pin) and no sales.
 - **Tshwane parcels are recognised by the cadastre key prefix `GTSH`** (Johannesburg's is `GJHB`).
   The roll is GV2025: valued as at 1 July 2024, in effect 1 July 2025 – 30 June 2029.
+- **Mossel Bay's roll** (ndkonlineroll.co.za, roll 7) is a plain GET: township id from
+  `GetTownships`, then `SearchFT` by erf. Roll 2022–2026, valued 1 July 2021. "R 0.00" is a
+  placeholder. Read columns by header and never the Owner column. Parcels: key prefix `W043`.
+- **The same NDK host's other rolls are stale**: Metsimaholo (roll 6) serves 2019–2024 and
+  Emfuleni (roll 1) 2017–2019, and their erven sit in "EXT nn" townships the cadastre does not
+  name. Not used. Metsimaholo's results include a column in SA ID number format.
+- **Most small towns publish their roll only as PDF books** (Drakenstein/Paarl, George, Knysna,
+  Overstrand, …): there the report is the cadastre plus agent-reported sales.
 - **Ekurhuleni is not scraped**: its portal states it is for property owners viewing their own
   values. Ask the City for an extract instead.
 

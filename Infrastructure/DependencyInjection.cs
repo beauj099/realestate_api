@@ -59,6 +59,14 @@ public static class DependencyInjection
                 ?? "RealWorth/1.0 (+https://api.realworth.co.za)");
         });
         services.AddScoped<global::PropertyData.Core.IPropertyDataProvider, global::PropertyData.Tshwane.TshwanePropertyProvider>();
+        // Mossel Bay: the national cadastre for the parcel, the municipality's NDK online roll for its value.
+        services.AddHttpClient<global::PropertyData.MosselBay.NdkRollClient>(c =>
+        {
+            c.Timeout = TimeSpan.FromSeconds(30);
+            c.DefaultRequestHeaders.UserAgent.ParseAdd(configuration.GetValue<string>("PropertyData:UserAgent")
+                ?? "RealWorth/1.0 (+https://api.realworth.co.za)");
+        });
+        services.AddScoped<global::PropertyData.Core.IPropertyDataProvider, global::PropertyData.MosselBay.MosselBayPropertyProvider>();
         services.Configure<ImageryOptions>(configuration.GetSection(ImageryOptions.SectionName));
         services.AddSingleton<ImageryLinkBuilder>();
         // Monthly check that every municipal source still answers as expected (emails on failure).

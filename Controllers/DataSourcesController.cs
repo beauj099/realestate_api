@@ -17,7 +17,7 @@ public class DataSourcesController : ControllerBase
         _health = health;
     }
 
-    /// <summary>Checks Cape Town, Johannesburg and the Tshwane roll against known properties.</summary>
+    /// <summary>Checks Cape Town, Johannesburg and the Tshwane and Mossel Bay rolls against known properties.</summary>
     [HttpGet("health")]
     public async Task<IActionResult> Health(CancellationToken cancellationToken)
     {

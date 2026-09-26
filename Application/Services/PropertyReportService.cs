@@ -15,7 +15,7 @@ namespace RealEstateApi.Application.Services;
 /// imagery and a second look at the same property never go back to the City.
 ///
 /// Coverage: Cape Town (everything), Johannesburg (values and current sales, no building sizes),
-/// Tshwane (values from its roll, from a GPS pin; no sales), and the national cadastre anywhere
+/// Tshwane and Mossel Bay (values from their rolls, from a GPS pin; no sales), and the national cadastre anywhere
 /// else (erf identity and size only, from a GPS pin).
 /// </summary>
 public class PropertyReportService(
@@ -33,6 +33,17 @@ public class PropertyReportService(
     public const string Johannesburg = PropertyData.Johannesburg.JohannesburgPropertyProvider.Municipality;
     public const string National = PropertyData.National.NationalCadastreProvider.Municipality;
     public const string Tshwane = PropertyData.Tshwane.TshwanePropertyProvider.Municipality;
+    public const string MosselBay = PropertyData.MosselBay.MosselBayPropertyProvider.Municipality;
+
+    /// <summary>
+    /// Municipalities with a roll of their own on top of the national cadastre, by the cadastre's
+    /// parcel-key prefix (the demarcation code).
+    /// </summary>
+    private static readonly (string Prefix, string Municipality)[] RollsByParcelKey =
+    [
+        (PropertyData.Tshwane.TshwanePropertyProvider.ParcelKeyPrefix, Tshwane),
+        (PropertyData.MosselBay.MosselBayPropertyProvider.ParcelKeyPrefix, MosselBay),
+    ];
 
     /// <summary>
     /// A GPS pin goes to each city in turn, then to the national cadastre. An address or erf has
@@ -51,10 +62,13 @@ public class PropertyReportService(
                 if (refs.Count > 0) break;
             }
 
-            // A Tshwane parcel (key "GTSH…") also has a value on the City's roll.
-            refs = refs.Select(r => r.Municipality == National && PropertyData.Tshwane.TshwanePropertyProvider.IsTshwaneParcel(r.Sg26)
-                ? r with { Municipality = Tshwane }
-                : r).ToList();
+            // A parcel in Tshwane ("GTSH…") or Mossel Bay ("W043…") also has a value on its roll.
+            refs = refs.Select(r =>
+            {
+                if (r.Municipality != National || r.Sg26 is null) return r;
+                var owner = RollsByParcelKey.FirstOrDefault(o => r.Sg26.StartsWith(o.Prefix, StringComparison.OrdinalIgnoreCase));
+                return owner.Municipality is null ? r : r with { Municipality = owner.Municipality };
+            }).ToList();
         }
         else
         {
@@ -322,6 +336,10 @@ public class PropertyReportService(
             "Tshwane values are from the GV2025 roll (valued as at 1 July 2024, in effect from 1 July 2025). " +
             "The roll has no sales or building sizes, so there are no municipal comparable sales; sales " +
             "reported by agents are the comparables here. Erf details are from the national cadastre.",
+        MosselBay =>
+            "Mossel Bay values are from the 2022–2026 roll (valued as at 1 July 2021, in effect from 1 July 2022). " +
+            "The roll has no sales or building sizes, so there are no municipal comparable sales; sales reported " +
+            "by agents are the comparables here. Erf boundaries are from the national cadastre.",
         National =>
             "Only the national cadastre covers this property: its erf number, size and boundary, from records of " +
             "about 2017. There is no municipal value or sales data for this area yet.",

@@ -30,6 +30,10 @@ public class DataSourceHealthService(IEnumerable<IPropertyDataProvider> provider
             r => r.Valuation is null ? "no municipal value (roll form or columns may have changed)"
                 : r.BestExtentM2 is not (> 3800 and < 4100) ? $"erf extent {r.BestExtentM2} m², expected 3 936"
                 : null),
+        new("Mossel Bay roll", "mosselbay", new ResolveQuery(Lat: -34.1260, Lng: 22.1110), "207",
+            r => r.Valuation is null ? "no municipal value (portal or columns may have changed)"
+                : r.BestExtentM2 is not (> 39000 and < 41000) ? $"erf extent {r.BestExtentM2} m², expected 40 025"
+                : null),
     ];
 
     public async Task<IReadOnlyList<DataSourceCheck>> RunAsync(CancellationToken ct)
