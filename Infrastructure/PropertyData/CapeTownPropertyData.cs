@@ -1158,8 +1158,9 @@ namespace PropertyData.CapeTown.Services
 
                 if (!o.ShowBuildingLabels || b.RoofM2 < 25) continue;
                 var c = Px(pts.Aggregate((0.0, 0.0), (acc, p) => (acc.Item1 + p.X / pts.Count, acc.Item2 + p.Y / pts.Count)));
-                var label = $"{b.RoofM2:0} m²";
-                if (b.HeightM is not null) label += $" · {b.HeightM:0.0} m";
+                // Invariant: a server on a comma-decimal culture (en-ZA) would print "6,5 m".
+                var label = string.Create(CultureInfo.InvariantCulture, $"{b.RoofM2:0} m²");
+                if (b.HeightM is not null) label += string.Create(CultureInfo.InvariantCulture, $" · {b.HeightM:0.0} m");
                 sb.Append(CultureInfo.InvariantCulture,
                     $"""<text x="{c.x:0.#}" y="{c.y:0.#}" font-size="11" fill="{o.TextColor}" text-anchor="middle" dominant-baseline="middle">{Esc(label)}</text>""");
             }
@@ -1198,8 +1199,8 @@ namespace PropertyData.CapeTown.Services
             if (o.ShowTitleBlock)
             {
                 double ty = o.HeightPx - titleH + 34;
-                var extent = rec.BestExtentM2 is null ? "" : $"Erf extent {rec.BestExtentM2:0} m²";
-                var roof = rec.TotalRoofM2 is null ? "" : $"  ·  Buildings {rec.TotalRoofM2:0} m² footprint";
+                var extent = rec.BestExtentM2 is null ? "" : string.Create(CultureInfo.InvariantCulture, $"Erf extent {rec.BestExtentM2:0} m²");
+                var roof = rec.TotalRoofM2 is null ? "" : string.Create(CultureInfo.InvariantCulture, $"  ·  Buildings {rec.TotalRoofM2:0} m² footprint");
                 var captured = rec.Buildings.FirstOrDefault()?.CapturedYyyyMm;
                 var src = captured is null
                     ? "Cadastre: City of Cape Town open data"

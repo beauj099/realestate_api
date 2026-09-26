@@ -13,6 +13,7 @@
 //        Microsoft.Extensions.Logging.Abstractions
 // ---------------------------------------------------------------------------------------------
 
+using System.Globalization;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -197,6 +198,9 @@ public sealed class SitePlanRendererTests
     [Fact]
     public void Renders_parcel_and_buildings()
     {
+        // A South African server formats decimals with a comma by default.
+        CultureInfo.CurrentCulture = new CultureInfo("en-ZA");
+
         var ring = new Ring(new List<LatLng>
         {
             new(-33.9900, 18.4705), new(-33.9900, 18.4715), new(-33.9895, 18.4715), new(-33.9895, 18.4705), new(-33.9900, 18.4705)
@@ -216,6 +220,7 @@ public sealed class SitePlanRendererTests
         });
 
         svg.Should().Contain("<path").And.Contain("345 m²").And.Contain("17 PINE ROAD CLAREMONT");
+        svg.Should().Contain("7.6 m", "labels use a decimal point whatever the server's culture");
         svg.Should().Contain("City of Cape Town open data", "the drawing must cite its source");
         svg.Should().Contain(">N<", "north arrow");
     }
