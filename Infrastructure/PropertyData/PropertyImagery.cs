@@ -31,12 +31,13 @@ public class ImageryLinkBuilder(IOptions<ImageryOptions> options)
 {
     public bool IsConfigured => !string.IsNullOrWhiteSpace(options.Value.GoogleMapsApiKey);
 
-    public IReadOnlyList<ImageryRefDto> For(string erf, string municipality, string suburb, double? lat, double? lng)
+    public IReadOnlyList<ImageryRefDto> For(string erf, string municipality, string suburb, string? sg26, double? lat, double? lng)
     {
         if (lat is null || lng is null || !IsConfigured) return [];
 
         var q = $"?erf={Uri.EscapeDataString(erf)}&municipality={Uri.EscapeDataString(municipality)}" +
-                $"&suburb={Uri.EscapeDataString(suburb)}";
+                $"&suburb={Uri.EscapeDataString(suburb)}" +
+                (sg26 is null ? "" : $"&sg26={Uri.EscapeDataString(sg26)}");
         return
         [
             new ImageryRefDto("satellite", $"/api/property/imagery/satellite{q}",

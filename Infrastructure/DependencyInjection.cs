@@ -44,6 +44,11 @@ public static class DependencyInjection
         services.AddCapeTownPropertyData(
             configuration.GetValue<string>("PropertyData:UserAgent")
             ?? "RealWorth/1.0 (+https://api.realworth.co.za)");
+        // Johannesburg and the national cadastre, after Cape Town (the router asks in that order).
+        services.AddScoped<global::PropertyData.Johannesburg.JohannesburgPropertyProvider>();
+        services.AddScoped<global::PropertyData.Core.IPropertyDataProvider>(sp =>
+            sp.GetRequiredService<global::PropertyData.Johannesburg.JohannesburgPropertyProvider>());
+        services.AddScoped<global::PropertyData.Core.IPropertyDataProvider, global::PropertyData.National.NationalCadastreProvider>();
         services.Configure<ImageryOptions>(configuration.GetSection(ImageryOptions.SectionName));
         services.AddSingleton<ImageryLinkBuilder>();
         services.AddHttpClient("imagery", c => c.Timeout = TimeSpan.FromSeconds(20));

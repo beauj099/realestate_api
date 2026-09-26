@@ -68,11 +68,11 @@ public class PropertyReportController : ControllerBase
     /// reads the City's cadastre, valuation roll and area sales); repeats come from the cache.</summary>
     [HttpGet("{municipality}/{erf}")]
     public async Task<IActionResult> GetReport(string municipality, string erf, [FromQuery] string? suburb,
-        [FromQuery] bool includeComparables = true, CancellationToken cancellationToken = default)
+        [FromQuery] string? sg26, [FromQuery] bool includeComparables = true, CancellationToken cancellationToken = default)
     {
         try
         {
-            return Ok(await _reports.GetReportAsync(municipality, erf, suburb, includeComparables, cancellationToken));
+            return Ok(await _reports.GetReportAsync(municipality, erf, suburb, sg26, includeComparables, cancellationToken));
         }
         catch (HttpRequestException)
         {
@@ -83,11 +83,12 @@ public class PropertyReportController : ControllerBase
     /// <summary>SVG site plan drawn from the municipal cadastre and footprints: ours, safe to print.</summary>
     [HttpGet("{municipality}/{erf}/site-plan.svg")]
     public async Task<IActionResult> GetSitePlan(string municipality, string erf, [FromQuery] string? suburb,
-        [FromQuery] int width = 0, [FromQuery] int height = 0, CancellationToken cancellationToken = default)
+        [FromQuery] string? sg26, [FromQuery] int width = 0, [FromQuery] int height = 0,
+        CancellationToken cancellationToken = default)
     {
         try
         {
-            var svg = await _reports.GetSitePlanSvgAsync(municipality, erf, suburb, width, height, cancellationToken);
+            var svg = await _reports.GetSitePlanSvgAsync(municipality, erf, suburb, sg26, width, height, cancellationToken);
             return Content(svg, "image/svg+xml", System.Text.Encoding.UTF8);
         }
         catch (HttpRequestException)
@@ -102,11 +103,11 @@ public class PropertyReportController : ControllerBase
     /// </summary>
     [HttpGet("imagery/{kind}")]
     public async Task<IActionResult> GetImagery(string kind, [FromQuery] string erf, [FromQuery] string municipality,
-        [FromQuery] string? suburb, CancellationToken cancellationToken)
+        [FromQuery] string? suburb, [FromQuery] string? sg26, CancellationToken cancellationToken)
     {
         if (!_imagery.IsConfigured) return NotFound();
 
-        var location = await _reports.GetLocationAsync(municipality, erf, suburb, cancellationToken);
+        var location = await _reports.GetLocationAsync(municipality, erf, suburb, sg26, cancellationToken);
         if (location is null) return NotFound();
 
         var url = kind.ToLowerInvariant() switch
