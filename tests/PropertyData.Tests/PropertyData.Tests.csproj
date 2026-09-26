@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Tests for the Cape Town property adapter (Infrastructure/PropertyData).
+       Unit tests run offline; [Trait("Category","Integration")] ones hit the live City
+       services. Offline only: dotnet test with filter Category!=Integration. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- FluentAssertions 7.x: 8.x changed to a commercial licence. -->
+    <PackageReference Include="FluentAssertions" Version="7.2.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\realestate_api.csproj" />
+  </ItemGroup>
+
+</Project>

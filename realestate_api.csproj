@@ -12,6 +12,7 @@
     <PackageReference Include="AWSSDK.S3" Version="4.0.25.3" />
     <PackageReference Include="BCrypt.Net-Next" Version="4.2.0" />
     <PackageReference Include="Dapper" Version="2.1.79" />
+    <PackageReference Include="HtmlAgilityPack" Version="1.13.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.9" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.10" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.1" />
@@ -30,11 +31,14 @@
     <Content Update="appsettings.Local.example.json" CopyToPublishDirectory="Never" />
   </ItemGroup>
 
-  <!-- Separate one-off tools with their own projects; not part of the API. -->
+  <!-- Separate tools and test projects with their own .csproj; not part of the API. -->
   <ItemGroup>
     <Compile Remove="tools/**" />
     <Content Remove="tools/**" />
     <None Remove="tools/**" />
+    <Compile Remove="tests/**" />
+    <Content Remove="tests/**" />
+    <None Remove="tests/**" />
   </ItemGroup>
 
   <ItemGroup>

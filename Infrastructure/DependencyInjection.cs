@@ -1,5 +1,7 @@
 using RealEstateApi.Application.Services;
+using PropertyData.CapeTown;
 using RealEstateApi.Infrastructure.Data;
+using RealEstateApi.Infrastructure.PropertyData;
 using RealEstateApi.Infrastructure.Repositories;
 using RealEstateApi.Infrastructure.Services;
 
@@ -35,6 +37,16 @@ public static class DependencyInjection
             services.AddSingleton<IEmailSender, SmtpEmailSender>();
         else
             services.AddSingleton<IEmailSender, LoggingEmailSender>();
+
+        // Property reports from public municipal data (Cape Town). No credentials needed; the
+        // UserAgent tells the City who is calling, so set a real contact in PropertyData:UserAgent.
+        services.AddMemoryCache();
+        services.AddCapeTownPropertyData(
+            configuration.GetValue<string>("PropertyData:UserAgent")
+            ?? "RealWorth/1.0 (+https://api.realworth.co.za)");
+        services.Configure<ImageryOptions>(configuration.GetSection(ImageryOptions.SectionName));
+        services.AddSingleton<ImageryLinkBuilder>();
+        services.AddHttpClient("imagery", c => c.Timeout = TimeSpan.FromSeconds(20));
 
         return services;
     }
@@ -75,6 +87,7 @@ public static class DependencyInjection
         services.AddScoped<ListingOutdoorFeatureService>();
         services.AddScoped<AuthService>();
         services.AddScoped<AgentProfileService>();
+        services.AddScoped<PropertyReportService>();
 
         return services;
     }
