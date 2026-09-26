@@ -26,6 +26,24 @@ public class PropertyReportController : ControllerBase
         _httpFactory = httpFactory;
     }
 
+    /// <summary>
+    /// Address type-ahead ("17 pine", "17 pine rd clar", "pine rd") from the City of Cape Town's
+    /// parcel records: up to 8 real addresses with their erf and location. The app debounces;
+    /// fewer than 3 characters returns nothing.
+    /// </summary>
+    [HttpGet("suggest")]
+    public async Task<IActionResult> Suggest([FromQuery] string? q, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await _reports.SuggestAsync(q ?? "", cancellationToken));
+        }
+        catch (HttpRequestException)
+        {
+            return CityUnavailable();
+        }
+    }
+
     /// <summary>Address, coordinate or erf → candidate properties (usually one).</summary>
     [HttpPost("resolve")]
     public async Task<IActionResult> Resolve([FromBody] ResolvePropertyRequest request, CancellationToken cancellationToken)

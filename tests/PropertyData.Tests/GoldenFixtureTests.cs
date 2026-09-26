@@ -321,6 +321,37 @@ public sealed class CapeTownGoldenFixtureTests
         rec.Provenance.Should().Contain(p => p.Field == "comparables");
     }
 
+    [Theory]
+    [InlineData("17 pine")]
+    [InlineData("17 Pine Rd Clar")]
+    [InlineData("17 pine road, claremont")]
+    [InlineData("17 pine r")]                 // half-typed "road"
+    public async Task Suggests_the_erf_while_typing(string typed)
+    {
+        await using var sp = Build();
+        var spatial = sp.GetRequiredService<CapeTownSpatialClient>();
+
+        var found = await spatial.SuggestAsync(typed);
+
+        found.Count.Should().BeInRange(1, 8, "a suggestion list, not the whole register");
+        found.Should().Contain(s => s.Erf == Erf && s.Suburb == "CLAREMONT" && s.StreetName == "PINE");
+        var hit = found.First(s => s.Erf == Erf);
+        hit.StreetNumber.Should().Be(17);
+        hit.Location!.Lat.Should().BeApproximately(Lat, 0.0005);
+    }
+
+    [Fact]
+    public async Task Suggests_streets_before_a_number_is_typed()
+    {
+        await using var sp = Build();
+        var spatial = sp.GetRequiredService<CapeTownSpatialClient>();
+
+        var found = await spatial.SuggestAsync("pine rd clare");
+
+        found.Should().Contain(s => s.StreetName == "PINE" && s.Suburb == "CLAREMONT" && s.Erf == null);
+        found.Should().NotContain(s => s.StreetName == "PINETREE", "a typed street type (Rd) narrows the match");
+    }
+
     [Fact]
     public async Task Sales_list_arrives_in_one_request()
     {

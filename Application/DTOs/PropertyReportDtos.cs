@@ -5,6 +5,24 @@ namespace RealEstateApi.Application.DTOs;
 
 public record ResolvePropertyRequest(string? Address, double? Lat, double? Lng, string? Erf, string? Suburb);
 
+/// <summary>
+/// An address the agent can pick while typing. <see cref="Erf"/> and the location are set for a
+/// numbered address (a real erf); a bare street (no number yet) has neither.
+/// </summary>
+public record AddressSuggestionDto(
+    string Label,
+    string? StreetNumber,
+    string StreetName,
+    string Suburb,
+    string City,
+    string Province,
+    string Country,
+    string? Erf,
+    string? Sg26,
+    double? Lat,
+    double? Lng,
+    string Municipality);
+
 public record PropertyCandidateDto(string Municipality, string Erf, string? Sg26, string Suburb, string Township);
 
 public record MoneyRangeDto(decimal? Low, decimal? Mid, decimal? High);

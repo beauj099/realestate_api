@@ -362,6 +362,11 @@ namespace PropertyData.CapeTown.Internal
             return new ParsedAddress(number, suffix, streetName, type, suburb, city, raw);
         }
 
+        public static bool IsStreetType(string token) => TypeSynonyms.ContainsKey(token);
+
+        /// <summary>"RD" → "ROAD"; null when the token is not a street type.</summary>
+        public static string? CanonicalType(string token) => TypeSynonyms.GetValueOrDefault(token);
+
         /// <summary>Escapes a value for an ArcGIS SQL-92 where clause.</summary>
         public static string SqlLiteral(string v) => v.Replace("'", "''");
     }
@@ -384,7 +389,8 @@ namespace PropertyData.CapeTown.Clients
         public async Task<List<JsonElement>> QueryAsync(
             string layerUrl,
             IDictionary<string, string> form,
-            CancellationToken ct = default)
+            CancellationToken ct = default,
+            bool singlePage = false)
         {
             var results = new List<JsonElement>();
             int offset = 0;
@@ -408,7 +414,7 @@ namespace PropertyData.CapeTown.Clients
                 foreach (var f in feats.EnumerateArray()) results.Add(f.Clone());
 
                 bool more = root.TryGetProperty("exceededTransferLimit", out var ex) && ex.ValueKind == JsonValueKind.True;
-                if (!more) break;
+                if (!more || singlePage) break;
                 offset += feats.GetArrayLength();
                 if (offset > 20_000) { log.LogWarning("Paging cap hit on {Layer}", layerUrl); break; }
             }
@@ -449,6 +455,14 @@ namespace PropertyData.CapeTown.Clients
 {
     using PropertyData.CapeTown.Internal;
     using PropertyData.Core.Models;
+
+    /// <summary>
+    /// One address suggestion. With a street number it is a real erf (Erf, Location set);
+    /// without one it is a street in a suburb, for the agent to add the number to.
+    /// </summary>
+    public sealed record AddressSuggestion(
+        int? StreetNumber, string? StreetNumberSuffix, string StreetName, string? StreetType,
+        string Suburb, string? Erf, string? Sg26, LatLng? Location);
 
     public sealed record ParcelHit(
         string Erf, string? Sg26, string? Zoning, string? Ward, string? SubCouncil,
@@ -531,6 +545,99 @@ namespace PropertyData.CapeTown.Clients
                 ["returnGeometry"] = "true",
                 ["outSR"] = "4326",
             }, ct);
+        }
+
+        /// <summary>
+        /// Type-ahead: "17 pine" → erfs at 17 PINE…, "17 pine rd clar" narrows the suburb, "pine rd"
+        /// (no number) → streets. One small single-page query per call; callers debounce and cache.
+        /// </summary>
+        public async Task<List<AddressSuggestion>> SuggestAsync(string text, int limit = 8, CancellationToken ct = default)
+        {
+            var found = await SuggestOnceAsync(text, limit, ct);
+            // Mid-word ("17 pine r"): the half-typed last word matches nothing, so try without it.
+            var words = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (found.Count == 0 && words.Length > 2)
+                found = await SuggestOnceAsync(string.Join(' ', words[..^1]), limit, ct);
+            return found;
+        }
+
+        private async Task<List<AddressSuggestion>> SuggestOnceAsync(string text, int limit, CancellationToken ct)
+        {
+            var tokens = System.Text.RegularExpressions.Regex
+                .Replace(text.ToUpperInvariant(), @"[^A-Z0-9 ]", " ")
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
+            if (tokens.Count == 0) return [];
+
+            int? number = null;
+            string? suffix = null;
+            var numMatch = System.Text.RegularExpressions.Regex.Match(tokens[0], @"^(\d+)([A-Z])?$");
+            if (numMatch.Success)
+            {
+                number = int.Parse(numMatch.Groups[1].Value, CultureInfo.InvariantCulture);
+                suffix = numMatch.Groups[2].Success ? numMatch.Groups[2].Value : null;
+                tokens.RemoveAt(0);
+            }
+            if (tokens.Count == 0) return [];
+
+            // Street words run up to a street type ("RD"); anything after it narrows the suburb.
+            var typeAt = tokens.FindIndex(1, t => AddressNormalizer.IsStreetType(t));
+            var street = string.Join(' ', typeAt < 0 ? tokens : tokens.Take(typeAt));
+            var suburb = typeAt < 0 ? null : string.Join(' ', tokens.Skip(typeAt + 1));
+            if (street.Length < 2) return [];
+
+            var where = new StringBuilder($"STR_NAME LIKE '{AddressNormalizer.SqlLiteral(street)}%'");
+            if (number is not null) where.Append($" AND ADR_NO={number}");
+            // A typed street type ("RD") narrows to it: "PINE RD" is not "PINETREE AVENUE".
+            if (typeAt >= 0 && AddressNormalizer.CanonicalType(tokens[typeAt]) is { } type)
+                where.Append($" AND UPPER(LU_STR_NAME_TYPE)='{AddressNormalizer.SqlLiteral(type)}'");
+            if (!string.IsNullOrWhiteSpace(suburb))
+                where.Append($" AND OFC_SBRB_NAME LIKE '{AddressNormalizer.SqlLiteral(suburb)}%'");
+
+            if (number is null)
+            {
+                var streets = await arc.QueryAsync(ParcelsLayer, new Dictionary<string, string>
+                {
+                    ["where"] = where.ToString(),
+                    ["outFields"] = "STR_NAME,LU_STR_NAME_TYPE,OFC_SBRB_NAME",
+                    ["returnDistinctValues"] = "true",
+                    ["returnGeometry"] = "false",
+                    ["orderByFields"] = "STR_NAME,OFC_SBRB_NAME",
+                    ["resultRecordCount"] = limit.ToString(CultureInfo.InvariantCulture),
+                }, ct, singlePage: true);
+                return streets.Select(f =>
+                {
+                    var at = f.GetProperty("attributes");
+                    return new AddressSuggestion(null, null, ArcGisClient.Str(at, "STR_NAME") ?? "",
+                        ArcGisClient.Str(at, "LU_STR_NAME_TYPE"), ArcGisClient.Str(at, "OFC_SBRB_NAME") ?? "",
+                        null, null, null);
+                }).ToList();
+            }
+
+            var feats = await arc.QueryAsync(ParcelsLayer, new Dictionary<string, string>
+            {
+                ["where"] = where.ToString(),
+                ["outFields"] = ParcelFields,
+                ["returnGeometry"] = "true",
+                ["outSR"] = "4326",
+                ["orderByFields"] = "STR_NAME,OFC_SBRB_NAME",
+                ["resultRecordCount"] = limit.ToString(CultureInfo.InvariantCulture),
+            }, ct, singlePage: true);
+
+            var list = feats.Select(f =>
+            {
+                var at = f.GetProperty("attributes");
+                var ring = ArcGisClient.ReadRing(f);
+                var sfx = ArcGisClient.Str(at, "ADR_NO_SFX");
+                return new AddressSuggestion(
+                    (int?)ArcGisClient.Num(at, "ADR_NO"), string.IsNullOrWhiteSpace(sfx) ? null : sfx,
+                    ArcGisClient.Str(at, "STR_NAME") ?? "", ArcGisClient.Str(at, "LU_STR_NAME_TYPE"),
+                    ArcGisClient.Str(at, "OFC_SBRB_NAME") ?? "",
+                    ArcGisClient.Str(at, "PRTY_NMBR"), ArcGisClient.Str(at, "SG26_CODE"),
+                    ring is null ? null : Geo.Centroid(ring));
+            });
+            // "17B": prefer the matching suffix, keep the rest after it.
+            return suffix is null ? list.ToList()
+                : list.OrderByDescending(s => string.Equals(s.StreetNumberSuffix, suffix, StringComparison.OrdinalIgnoreCase)).ToList();
         }
 
         public async Task<List<ParcelHit>> FindByErfAsync(string erf, string? suburb, CancellationToken ct = default)

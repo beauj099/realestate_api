@@ -17,6 +17,7 @@ namespace RealEstateApi.Application.Services;
 /// </summary>
 public class PropertyReportService(
     IEnumerable<IPropertyDataProvider> providers,
+    PropertyData.CapeTown.Clients.CapeTownSpatialClient spatial,
     IMemoryCache cache,
     ImageryLinkBuilder imagery)
 {
@@ -31,6 +32,35 @@ public class PropertyReportService(
             new ResolveQuery(request.Address, request.Lat, request.Lng, request.Erf, request.Suburb), ct);
         return refs.Select(r => new PropertyCandidateDto(r.Municipality, r.Erf, r.Sg26, r.Suburb, r.Township)).ToList();
     }
+
+    /// <summary>Address type-ahead from the City's parcel records. Cached an hour per query.</summary>
+    public async Task<IReadOnlyList<AddressSuggestionDto>> SuggestAsync(string query, CancellationToken ct)
+    {
+        var q = query.Trim();
+        if (q.Length < 3) return [];
+        var key = $"suggest:{q.ToUpperInvariant()}";
+        if (cache.TryGetValue(key, out IReadOnlyList<AddressSuggestionDto>? hit) && hit is not null) return hit;
+
+        var found = await spatial.SuggestAsync(q, 8, ct);
+        IReadOnlyList<AddressSuggestionDto> result = found.Select(s =>
+        {
+            var street = TitleCase(string.Join(' ', new[] { s.StreetName, s.StreetType }.Where(p => !string.IsNullOrWhiteSpace(p))));
+            var number = s.StreetNumber is null ? null : $"{s.StreetNumber}{s.StreetNumberSuffix}";
+            var suburb = TitleCase(s.Suburb);
+            return new AddressSuggestionDto(
+                Label: $"{(number is null ? "" : number + " ")}{street}, {suburb}",
+                StreetNumber: number, StreetName: street, Suburb: suburb,
+                City: "Cape Town", Province: "Western Cape", Country: "South Africa",
+                Erf: s.Erf, Sg26: s.Sg26, Lat: s.Location?.Lat, Lng: s.Location?.Lng,
+                Municipality: CapeTown);
+        }).ToList();
+
+        cache.Set(key, result, TimeSpan.FromHours(1));
+        return result;
+    }
+
+    private static string TitleCase(string s) =>
+        System.Globalization.CultureInfo.InvariantCulture.TextInfo.ToTitleCase(s.ToLowerInvariant());
 
     public async Task<PropertyReportDto> GetReportAsync(string municipality, string erf, string? suburb,
         bool includeComparables, CancellationToken ct)
