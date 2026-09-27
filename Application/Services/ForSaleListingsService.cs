@@ -45,7 +45,11 @@ public class ForSaleListingsService(Property24Client p24, ILogger<ForSaleListing
             }
         }
 
-        var best = Rank(listings.DistinctBy(l => l.ListingNumber), bedrooms, floorM2, erfM2).Take(max).ToList();
+        // One home is often advertised by more than one agency: same price, size and text.
+        var best = Rank(listings.DistinctBy(l => l.ListingNumber), bedrooms, floorM2, erfM2)
+            .DistinctBy(l => (l.PriceZar, l.Bedrooms, l.ErfM2, l.Excerpt ?? l.Address ?? l.ListingNumber))
+            .Take(max)
+            .ToList();
         var detailed = new List<P24Listing>();
         foreach (var l in best) detailed.Add(await p24.WithDetailsAsync(l, ct));
 
