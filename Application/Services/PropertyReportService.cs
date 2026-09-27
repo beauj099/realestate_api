@@ -286,18 +286,18 @@ public class PropertyReportService(
             .OrderByDescending(c => c.Included)
             .ThenByDescending(c => c.SaleDate)
             .Take(40)
-            .Select(c => new ComparableDto(
-                c.Address, c.Erf, c.ErfExtentM2, c.DwellingExtentM2,
-                c.SaleDate.ToString("yyyy-MM-dd"), c.SalePriceZar, c.IndexedPriceZar,
-                c.PricePerDwellingM2 is null ? null : Math.Round(c.PricePerDwellingM2.Value),
-                c.Included, c.Included ? null : Describe(c.Exclusion)))
+            .Select(ToDto)
             .ToList() ?? [],
 
         ComparableSummary: r.Comparables is null ? null : new ComparableSummaryDto(
             r.Comparables.All.Count, r.Comparables.Included.Count,
             r.Comparables.ExcludedZeroPrice, r.Comparables.ExcludedImplausible,
             r.Comparables.ExcludedTooOld, r.Comparables.ExcludedDissimilar,
-            r.Comparables.MedianPricePerDwellingM2, r.Comparables.MedianPricePerErfM2),
+            r.Comparables.MedianPricePerDwellingM2, r.Comparables.MedianPricePerErfM2,
+            RadiusM: r.Comparables.RadiusM,
+            ExcludedMultiProperty: r.Comparables.All.Count(c => c.Exclusion == ComparableExclusion.MultiPropertySale),
+            ExcludedNoBuilding: r.Comparables.All.Count(c => c.Exclusion == ComparableExclusion.NoBuilding),
+            ExcludedTooFar: r.Comparables.All.Count(c => c.Exclusion == ComparableExclusion.TooFar)),
 
         IndicativeValue: r.Comparables?.ImpliedValueMidZar is null ? null : new MoneyRangeDto(
             r.Comparables.ImpliedValueLowZar, r.Comparables.ImpliedValueMidZar, r.Comparables.ImpliedValueHighZar),
@@ -310,23 +310,119 @@ public class PropertyReportService(
         ComparablesMethod: MethodFor(r),
         CoverageNote: CoverageFor(r),
         Provenance: r.Provenance.Select(p => new ProvenanceDto(p.Field, p.Source, p.FetchedAt.ToString("O"))).ToList(),
-        GeneratedAtUtc: DateTimeOffset.UtcNow.ToString("O"));
+        GeneratedAtUtc: DateTimeOffset.UtcNow.ToString("O"),
+        LastSale: r.LastSale is null ? null : new SaleRecordDto(r.LastSale.Date.ToString("yyyy-MM-dd"), r.LastSale.PriceZar),
+        StreetSales: StreetSales(r),
+        AreaMarket: AreaMarket(r));
+
+    private static ComparableDto ToDto(Comparable c) => new(
+        c.Address, c.Erf, c.ErfExtentM2, c.DwellingExtentM2,
+        c.SaleDate.ToString("yyyy-MM-dd"), c.SalePriceZar, c.IndexedPriceZar,
+        c.PricePerDwellingM2 is null ? null : Math.Round(c.PricePerDwellingM2.Value),
+        c.Included, c.Included ? null : Describe(c.Exclusion),
+        c.DistanceM, c.Location?.Lat, c.Location?.Lng);
+
+    /// <summary>Sales that are a market price for one property (not R0, not a bulk deal).</summary>
+    private static bool IsMarketSale(Comparable c) => c.Exclusion is not
+        (ComparableExclusion.ZeroPrice or ComparableExclusion.ImplausiblePrice
+         or ComparableExclusion.MultiPropertySale or ComparableExclusion.IsSubject);
+
+    /// <summary>"10 BOSMAN STREET STRAND" → "BOSMAN STREET" (the number and the suburb removed).</summary>
+    internal static string? StreetOf(string address, string suburb)
+    {
+        var a = System.Text.RegularExpressions.Regex.Replace(address.ToUpperInvariant().Trim(), @"^\d+[A-Z]?\s+", "");
+        var s = suburb.Trim().ToUpperInvariant();
+        if (s.Length > 0 && a.EndsWith(" " + s, StringComparison.Ordinal)) a = a[..^(s.Length + 1)];
+        return a.Length == 0 || a.StartsWith("ERF ", StringComparison.Ordinal) ? null : a;
+    }
+
+    /// <summary>The ten latest market sales in the subject's street.</summary>
+    private static IReadOnlyList<ComparableDto>? StreetSales(PropertyRecord r)
+    {
+        if (r.Comparables is null || StreetOf(r.FormattedAddress, r.Ref.Suburb) is not { } street) return null;
+        return r.Comparables.All
+            .Where(c => c.SalePriceZar > 0 && c.Exclusion is not ComparableExclusion.MultiPropertySale)
+            .Where(c => System.Text.RegularExpressions.Regex.Replace(c.Address.ToUpperInvariant(), @"^\d+[A-Z]?\s+", "")
+                .StartsWith(street + " ", StringComparison.Ordinal)
+                || System.Text.RegularExpressions.Regex.Replace(c.Address.ToUpperInvariant(), @"^\d+[A-Z]?\s+", "") == street)
+            .OrderByDescending(c => c.SaleDate)
+            .Take(10)
+            .Select(ToDto)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Every market sale within the comparables' radius (or the whole area list when there was
+    /// none), by year and by price band.
+    /// </summary>
+    private static AreaMarketDto? AreaMarket(PropertyRecord r)
+    {
+        if (r.Comparables is null) return null;
+        var radius = r.Comparables.RadiusM;
+        var sales = r.Comparables.All
+            .Where(IsMarketSale)
+            .Where(c => radius is null || c.DistanceM <= radius)
+            .ToList();
+        if (sales.Count == 0) return new AreaMarketDto(radius, 0, null, [], []);
+
+        var prices = sales.Select(c => c.SalePriceZar).Order().ToList();
+        decimal At(double q) => prices[Math.Clamp((int)Math.Round(q * (prices.Count - 1)), 0, prices.Count - 1)];
+
+        var byYear = sales.GroupBy(c => c.SaleDate.Year).OrderBy(g => g.Key)
+            .Select(g => new YearlySalesDto(g.Key, g.Count(), Median(g.Select(c => c.SalePriceZar))))
+            .ToList();
+
+        // Ten equal bands between the 5th and 95th percentile, so one mansion does not flatten
+        // the chart; the outer bands take what lies beyond.
+        var lo = At(0.05);
+        var hi = At(0.95);
+        var bands = new List<PriceBandDto>();
+        if (hi > lo)
+        {
+            var width = (hi - lo) / 10m;
+            for (var i = 0; i < 10; i++)
+            {
+                var from = lo + width * i;
+                var to = i == 9 ? hi : from + width;
+                var n = sales.Count(c => (i == 0 || c.SalePriceZar >= from) && (i == 9 || c.SalePriceZar < to));
+                bands.Add(new PriceBandDto(Math.Round(from, -3), Math.Round(to, -3), n,
+                    Math.Round(100.0 * n / sales.Count, 1)));
+            }
+        }
+        return new AreaMarketDto(radius, sales.Count, Median(prices), byYear, bands);
+    }
+
+    private static decimal Median(IEnumerable<decimal> values)
+    {
+        var v = values.Order().ToList();
+        return v.Count % 2 == 1 ? v[v.Count / 2] : (v[v.Count / 2 - 1] + v[v.Count / 2]) / 2m;
+    }
 
     /// <summary>How the comparables were chosen, in a sentence the report prints as is.</summary>
-    private static string? MethodFor(PropertyRecord r) => r.Comparables is null ? null : r.Ref.Municipality switch
+    private static string? MethodFor(PropertyRecord r)
     {
-        Johannesburg =>
-            $"The last registered sale of every stand of the same category within {PropertyData.Johannesburg.JohannesburgPropertyProvider.ComparableRadiusM:0} m, " +
-            "over the last four years (City of Johannesburg). Transfers for R0 and implausibly low prices were removed. " +
-            "Johannesburg does not publish building sizes, so sales were compared by erf size and the range is the " +
-            "median price per square metre of erf applied to this property.",
-        _ =>
-            "Sales recorded by the City of Cape Town in the property's area were filtered: transfers for R0 and " +
-            "implausibly low prices (family transfers, part-transfers, correction deeds) were removed, as were sales " +
-            "older than four years and homes whose building size differs by more than 30%. Older sales were indexed " +
-            "to today with the suburb's change between the 2022 and 2025 rolls; the median price per square metre of " +
-            "building applied to this property gives the midpoint, and the quartiles the range.",
-    };
+        if (r.Comparables is null) return null;
+        var near = r.Comparables.RadiusM is { } radius
+            ? $"The nearest were used: sales within {radius} m of the property (the search widens to 1 km only when " +
+              "fewer than six similar sales are that close). "
+            : "Too few similar sales lie within 1 km, so the whole area was used. ";
+        const string cleaned = "Transfers for R0, implausibly low prices (family transfers, part-transfers, correction " +
+                               "deeds) and several properties sold together for one price were removed";
+        return r.Ref.Municipality switch
+        {
+            Johannesburg =>
+                "The last registered sale of every stand of the same category over the last four years (City of " +
+                $"Johannesburg). {cleaned}. {near}Johannesburg does not publish building sizes, so sales were compared " +
+                "by erf size: each price is carried over to this erf's size (a stand twice the size sells for about " +
+                "1.5 times as much, not twice), and the median and quartiles of those give the range.",
+            _ =>
+                $"Sales recorded by the City of Cape Town around the property were filtered. {cleaned}, as were sales " +
+                "older than four years, sales with no building on record and homes whose building size differs by more " +
+                $"than 30% (50% where that leaves too few). {near}Older sales were indexed to today with the suburb's change between the 2022 and 2025 " +
+                "rolls, and each was carried over to this home's size (a home twice the size sells for about 1.5 times " +
+                "as much, not twice); the median of those gives the midpoint, and the quartiles the range.",
+        };
+    }
 
     /// <summary>What this report cannot contain for the property's area, for a note the app shows.</summary>
     private static string? CoverageFor(PropertyRecord r) => r.Ref.Municipality switch
@@ -360,6 +456,9 @@ public class PropertyReportService(
         ComparableExclusion.DissimilarSize => "Size too different from this property",
         ComparableExclusion.TooOld => "Sold too long ago",
         ComparableExclusion.IsSubject => "This property",
+        ComparableExclusion.MultiPropertySale => "Several properties sold together for one price",
+        ComparableExclusion.NoBuilding => "No building on record",
+        ComparableExclusion.TooFar => "Further away than the nearer sales used",
         _ => e.ToString(),
     };
 }

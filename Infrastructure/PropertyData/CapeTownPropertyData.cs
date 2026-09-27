@@ -93,7 +93,19 @@ namespace PropertyData.Core.Models
         public double AnnualGrowthPercent => (Math.Pow(GrowthFactor, 1.0 / 3.0) - 1) * 100;
     }
 
-    public enum ComparableExclusion { None, ZeroPrice, ImplausiblePrice, DissimilarSize, TooOld, IsSubject }
+    public enum ComparableExclusion
+    {
+        None, ZeroPrice, ImplausiblePrice, DissimilarSize, TooOld, IsSubject,
+        /// <summary>One transfer of several properties at one price, recorded against each of them.</summary>
+        MultiPropertySale,
+        /// <summary>No building on record, while the subject has one (vacant land, or unknown).</summary>
+        NoBuilding,
+        /// <summary>Further away than the radius the report settled on.</summary>
+        TooFar,
+    }
+
+    /// <summary>A registered sale of the subject property itself.</summary>
+    public sealed record SaleRecord(DateOnly Date, decimal PriceZar);
 
     public sealed record Comparable
     {
@@ -105,6 +117,10 @@ namespace PropertyData.Core.Models
         public double DwellingExtentM2 { get; init; }
         public DateOnly SaleDate { get; init; }
         public decimal SalePriceZar { get; init; }
+
+        /// <summary>Where the sold property is (parcel centre) and how far from the subject, when known.</summary>
+        public LatLng? Location { get; set; }
+        public double? DistanceM { get; set; }
 
         public decimal? PricePerErfM2 => ErfExtentM2 > 0 ? SalePriceZar / (decimal)ErfExtentM2 : null;
         public decimal? PricePerDwellingM2 => DwellingExtentM2 > 0 ? SalePriceZar / (decimal)DwellingExtentM2 : null;
@@ -126,7 +142,9 @@ namespace PropertyData.Core.Models
         decimal? MedianPricePerErfM2,
         decimal? ImpliedValueLowZar,
         decimal? ImpliedValueMidZar,
-        decimal? ImpliedValueHighZar);
+        decimal? ImpliedValueHighZar,
+        // The radius the comparables were taken from (null: the City's whole neighbourhood list).
+        int? RadiusM = null);
 
     public sealed record Provenance(string Field, string Source, DateTimeOffset FetchedAt);
 
@@ -154,6 +172,9 @@ namespace PropertyData.Core.Models
         public MunicipalValuation? Valuation { get; init; }
         public SuburbBenchmark? Suburb { get; init; }
         public ComparableSet? Comparables { get; init; }
+
+        /// <summary>The subject's own last registered sale, when the source publishes it.</summary>
+        public SaleRecord? LastSale { get; init; }
 
         /// <summary>Populated by the AfriGIS adapter only, and gated on the POPIA checks.</summary>
         public object? Ownership { get; init; }
@@ -240,6 +261,16 @@ namespace PropertyData.CapeTown.Internal
                 s += x1 * y2 - x2 * y1;
             }
             return Math.Abs(s / 2.0);
+        }
+
+        /// <summary>Great-circle distance in metres (haversine; plenty at neighbourhood scale).</summary>
+        public static double DistanceM(LatLng a, LatLng b)
+        {
+            var dLat = (b.Lat - a.Lat) * Rad;
+            var dLng = (b.Lng - a.Lng) * Rad;
+            var h = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
+                    Math.Cos(a.Lat * Rad) * Math.Cos(b.Lat * Rad) * Math.Sin(dLng / 2) * Math.Sin(dLng / 2);
+            return 2 * 6_371_008.8 * Math.Asin(Math.Min(1, Math.Sqrt(h)));
         }
 
         public static LatLng Centroid(Ring ring)
@@ -561,6 +592,56 @@ namespace PropertyData.CapeTown.Clients
             }
 
             return hits;
+        }
+
+        /// <summary>
+        /// The centre of every parcel within <paramref name="radiusM"/> of a point, keyed by erf and
+        /// allotment ("4429 STRAND"): what the City's area-sales list lacks to be measured by
+        /// distance. About 2 800 parcels within 1 km in the Strand: two pages.
+        /// </summary>
+        public async Task<Dictionary<string, LatLng>> GetParcelCentresNearAsync(LatLng centre, double radiusM,
+            CancellationToken ct = default)
+        {
+            var feats = await arc.QueryAsync(ParcelsLayer, new Dictionary<string, string>
+            {
+                ["geometry"] = JsonSerializer.Serialize(new { x = centre.Lng, y = centre.Lat, spatialReference = new { wkid = 4326 } }),
+                ["geometryType"] = "esriGeometryPoint",
+                ["inSR"] = "4326",
+                ["distance"] = radiusM.ToString(CultureInfo.InvariantCulture),
+                ["units"] = "esriSRUnit_Meter",
+                ["spatialRel"] = "esriSpatialRelIntersects",
+                ["outFields"] = "PRTY_NMBR,ALT_NAME",
+                ["returnGeometry"] = "false",
+                ["returnCentroid"] = "true",
+                ["outSR"] = "4326",
+            }, ct);
+
+            var centres = new Dictionary<string, LatLng>(StringComparer.OrdinalIgnoreCase);
+            foreach (var f in feats)
+            {
+                if (!f.TryGetProperty("centroid", out var c)) continue;
+                var at = f.GetProperty("attributes");
+                var erf = ErfKey(ArcGisClient.Str(at, "PRTY_NMBR"));
+                if (erf is null) continue;
+                var point = new LatLng(c.GetProperty("y").GetDouble(), c.GetProperty("x").GetDouble());
+                centres.TryAdd($"{erf} {AllotmentKey(ArcGisClient.Str(at, "ALT_NAME"))}", point);
+                centres.TryAdd(erf, point);   // erf alone, for a sale whose town is spelt differently
+            }
+            return centres;
+        }
+
+        /// <summary>"8769-RE" / "8769-2" → "8769".</summary>
+        public static string? ErfKey(string? propertyNumber)
+        {
+            var m = System.Text.RegularExpressions.Regex.Match(propertyNumber ?? "", @"^\d+");
+            return m.Success ? m.Value : null;
+        }
+
+        /// <summary>"THE STRAND" → "STRAND", so the parcels layer and the sales list agree.</summary>
+        public static string AllotmentKey(string? allotment)
+        {
+            var a = (allotment ?? "").Trim().ToUpperInvariant();
+            return a.StartsWith("THE ", StringComparison.Ordinal) ? a[4..] : a;
         }
 
         /// <summary>Point-in-polygon lookup. Use this once a geocoder is in the chain — it generalises.</summary>
@@ -1057,7 +1138,14 @@ namespace PropertyData.CapeTown.Services
         double DwellingToleranceFraction = 0.30,   // ±30% on building size
         double ErfToleranceFraction = 0.50,
         int MaxAgeYears = 4,
-        int MinIncluded = 3);
+        int MinIncluded = 3,
+        // Nearest first: keep the comparables within the first radius that still leaves this many.
+        int MinNearby = 6,
+        // How value scales with size: price ∝ size^0.6 (double the size, ~1.5× the price).
+        double SizeElasticity = 0.6)
+    {
+        public static readonly int[] RadiusStepsM = [500, 1000];
+    }
 
     /// <summary>
     /// Where the credibility of the report actually lives. The City's list is raw: it includes
@@ -1078,6 +1166,14 @@ namespace PropertyData.CapeTown.Services
             var subjectErf = subject.BestExtentM2 ?? 0;
             var cutoff = reportDate.AddYears(-r.MaxAgeYears);
 
+            // Several properties transferred on one day for one identical price: a bulk deal (or a
+            // portfolio), recorded against each erf. Not a price for any one of them.
+            var bulk = raw.Where(c => c.SalePriceZar > 0)
+                .GroupBy(c => (c.SaleDate, c.SalePriceZar))
+                .Where(g => g.Select(c => c.Erf ?? c.ValuationRef).Distinct().Count() > 1)
+                .SelectMany(g => g)
+                .ToHashSet();
+
             foreach (var c in raw)
             {
                 if (!string.IsNullOrEmpty(subject.Ref.ValuationRef) &&
@@ -1087,62 +1183,73 @@ namespace PropertyData.CapeTown.Services
                 if (c.SalePriceZar <= 0) { c.Exclusion = ComparableExclusion.ZeroPrice; continue; }
                 if (c.SalePriceZar < r.MinPlausiblePriceZar) { c.Exclusion = ComparableExclusion.ImplausiblePrice; continue; }
                 if (c.SaleDate < cutoff) { c.Exclusion = ComparableExclusion.TooOld; continue; }
-
-                if (subjectDwelling > 0 && c.DwellingExtentM2 > 0)
-                {
-                    var ratio = c.DwellingExtentM2 / subjectDwelling;
-                    if (ratio < 1 - r.DwellingToleranceFraction || ratio > 1 + r.DwellingToleranceFraction)
-                    { c.Exclusion = ComparableExclusion.DissimilarSize; continue; }
-                }
-                else if (subjectErf > 0 && c.ErfExtentM2 > 0)
-                {
-                    var ratio = c.ErfExtentM2 / subjectErf;
-                    if (ratio < 1 - r.ErfToleranceFraction || ratio > 1 + r.ErfToleranceFraction)
-                    { c.Exclusion = ComparableExclusion.DissimilarSize; continue; }
-                }
+                if (bulk.Contains(c)) { c.Exclusion = ComparableExclusion.MultiPropertySale; continue; }
+                if (subjectDwelling > 0 && c.DwellingExtentM2 <= 0 && raw.Any(x => x.DwellingExtentM2 > 0))
+                { c.Exclusion = ComparableExclusion.NoBuilding; continue; }
 
                 c.Exclusion = ComparableExclusion.None;
                 c.IndexedPriceZar = Index(c.SalePriceZar, c.SaleDate, reportDate, suburb);
             }
 
-            var included = raw.Where(c => c.Included).ToList();
+            var candidates = raw.Where(c => c.Included).ToList();
 
-            // Too few survivors: relax the size test before relaxing anything else. A report with
-            // two comparables is worse than one with five slightly-less-similar comparables.
-            if (included.Count < r.MinIncluded)
+            // 1. Nearest first: the smallest radius that still leaves enough sales. A house down the
+            //    road says more than a same-sized one across the suburb, and price per m² of building
+            //    already allows for size. Sales of unknown distance stay only when no radius does.
+            int? radius = null;
+            if (candidates.Any(c => c.DistanceM is not null))
             {
-                foreach (var c in raw.Where(c => c.Exclusion == ComparableExclusion.DissimilarSize))
+                foreach (var step in ComparableRules.RadiusStepsM)
                 {
-                    c.Exclusion = ComparableExclusion.None;
-                    c.IndexedPriceZar = Index(c.SalePriceZar, c.SaleDate, reportDate, suburb);
+                    if (candidates.Count(c => c.DistanceM <= step) < r.MinNearby) continue;
+                    radius = step;
+                    foreach (var c in candidates.Where(c => c.DistanceM is null || c.DistanceM > step))
+                        c.Exclusion = ComparableExclusion.TooFar;
+                    candidates = candidates.Where(c => c.Included).ToList();
+                    break;
                 }
-                included = raw.Where(c => c.Included)
-                              .OrderBy(c => SizeDistance(c, subjectDwelling, subjectErf))
-                              .Take(Math.Max(r.MinIncluded, 8))
-                              .ToList();
-                foreach (var c in raw.Where(c => c.Included && !included.Contains(c)))
-                    c.Exclusion = ComparableExclusion.DissimilarSize;
             }
+
+            // 2. Then similar size among those: within 30%, else 50%, else the closest in size. A
+            //    report with two comparables is worse than one with five slightly-less-similar ones.
+            bool Similar(Comparable c, double tolerance)
+            {
+                if (subjectDwelling > 0 && c.DwellingExtentM2 > 0)
+                    return Math.Abs(c.DwellingExtentM2 / subjectDwelling - 1) <= tolerance;
+                if (subjectErf > 0 && c.ErfExtentM2 > 0)
+                    return Math.Abs(c.ErfExtentM2 / subjectErf - 1) <= Math.Max(tolerance, r.ErfToleranceFraction);
+                return true;
+            }
+            var included = candidates.Where(c => Similar(c, r.DwellingToleranceFraction)).ToList();
+            if (included.Count < r.MinNearby) included = candidates.Where(c => Similar(c, 0.5)).ToList();
+            if (included.Count < r.MinIncluded)
+                included = candidates.OrderBy(c => SizeDistance(c, subjectDwelling, subjectErf))
+                                     .Take(Math.Max(r.MinIncluded, 8))
+                                     .ToList();
+            foreach (var c in candidates.Where(c => !included.Contains(c)))
+                c.Exclusion = ComparableExclusion.DissimilarSize;
 
             var perDwelling = Median(included.Where(c => c.DwellingExtentM2 > 0)
                                              .Select(c => (c.IndexedPriceZar ?? c.SalePriceZar) / (decimal)c.DwellingExtentM2));
             var perErf = Median(included.Where(c => c.ErfExtentM2 > 0)
                                         .Select(c => (c.IndexedPriceZar ?? c.SalePriceZar) / (decimal)c.ErfExtentM2));
 
+            // Each sale carried over to this property's size. Not pro rata: a home twice the size
+            // sells for about 1.5 times as much (size elasticity 0.6), so scaling price per m²
+            // straight up overvalues larger homes and undervalues smaller ones.
             decimal? mid = null, low = null, high = null;
-            if (perDwelling is not null && subjectDwelling > 0)
+            IEnumerable<decimal> Adjusted(Func<Comparable, double> size, double subjectSize) =>
+                included.Where(c => size(c) > 0).Select(c =>
+                    (c.IndexedPriceZar ?? c.SalePriceZar) * (decimal)Math.Pow(subjectSize / size(c), r.SizeElasticity));
+            var implied = subjectDwelling > 0 && perDwelling is not null
+                ? Adjusted(c => c.DwellingExtentM2, subjectDwelling).ToList()
+                : subjectErf > 0 && perErf is not null
+                    ? Adjusted(c => c.ErfExtentM2, subjectErf).ToList()
+                    : [];
+            if (implied.Count > 0)
             {
-                mid = perDwelling.Value * (decimal)subjectDwelling;
-                var spread = Spread(included.Where(c => c.DwellingExtentM2 > 0)
-                                            .Select(c => (c.IndexedPriceZar ?? c.SalePriceZar) / (decimal)c.DwellingExtentM2));
-                low = spread.P25 * (decimal)subjectDwelling;
-                high = spread.P75 * (decimal)subjectDwelling;
-            }
-            else if (perErf is not null && subjectErf > 0)
-            {
-                mid = perErf.Value * (decimal)subjectErf;
-                low = mid * 0.9m;
-                high = mid * 1.1m;
+                mid = Median(implied);
+                (low, high) = Spread(implied);
             }
 
             return new ComparableSet(
@@ -1156,7 +1263,8 @@ namespace PropertyData.CapeTown.Services
                 MedianPricePerErfM2: perErf is null ? null : Math.Round(perErf.Value),
                 ImpliedValueLowZar: Round(low),
                 ImpliedValueMidZar: Round(mid),
-                ImpliedValueHighZar: Round(high));
+                ImpliedValueHighZar: Round(high),
+                RadiusM: radius);
         }
 
         /// <summary>
@@ -1387,6 +1495,19 @@ namespace PropertyData.CapeTown
             return hits.Select(h => new PropertyRef(h.Erf, h.Sg26, null, h.Township, h.Suburb)).ToList();
         }
 
+        private async Task<List<T>> Optional<T>(Task<List<T>> task, string what)
+        {
+            try
+            {
+                return await task;
+            }
+            catch (HttpRequestException ex)
+            {
+                log.LogWarning(ex, "Cape Town {What} unavailable; the report goes without", what);
+                return [];
+            }
+        }
+
         public async Task<PropertyRecord> FetchRecordAsync(PropertyRef @ref, RecordOptions? opts = null, CancellationToken ct = default)
         {
             var o = opts ?? new RecordOptions();
@@ -1421,11 +1542,12 @@ namespace PropertyData.CapeTown
             var zoningTask = sg26 is null ? Task.FromResult<(string?, string?)>((null, null))
                                           : spatial.GetZoningAsync(sg26, ct);
             var suburbTask = spatial.GetSuburbBenchmarkAsync(parcel.Suburb, ct);
+            // Buildings and plan approvals are detail: a City host being down must not cost the report.
             var footTask = o.IncludeBuildings && parcel.Boundary is not null
-                ? spatial.GetFootprintsAsync(parcel.Boundary, ct)
+                ? Optional(spatial.GetFootprintsAsync(parcel.Boundary, ct), "building footprints")
                 : Task.FromResult(new List<BuildingFootprint>());
             var workTask = o.IncludeApprovedWork
-                ? spatial.GetApprovedWorkAsync(parcel.Erf, parcel.Suburb, ct)
+                ? Optional(spatial.GetApprovedWorkAsync(parcel.Erf, parcel.Suburb, ct), "plan approvals")
                 : Task.FromResult(new List<ApprovedWork>());
 
             await Task.WhenAll(zoningTask, suburbTask, footTask, workTask);
@@ -1487,8 +1609,37 @@ namespace PropertyData.CapeTown
                     ? new ComparableRules(MaxAgeYears: Math.Max(1, DateTime.UtcNow.Year - o.ComparableSinceYear))
                     : new ComparableRules();
 
+                // The City's list is its own "general area"; measure each sale so the analyzer can
+                // keep the nearest. Without the parcel centres it falls back to the whole list.
+                if (record.Location is { } here)
+                {
+                    try
+                    {
+                        var centres = await spatial.GetParcelCentresNearAsync(here, ComparableRules.RadiusStepsM[^1], ct);
+                        foreach (var sale in rawSales)
+                        {
+                            var parts = sale.RegisteredDescription.Split(' ', 2);
+                            var erfKey = CapeTownSpatialClient.ErfKey(parts[0]);
+                            if (erfKey is null) continue;
+                            var town = parts.Length > 1 ? CapeTownSpatialClient.AllotmentKey(parts[1]) : "";
+                            if (centres.TryGetValue($"{erfKey} {town}", out var at) || centres.TryGetValue(erfKey, out at))
+                            {
+                                sale.Location = at;
+                                sale.DistanceM = Math.Round(Geo.DistanceM(here, at));
+                            }
+                        }
+                    }
+                    catch (HttpRequestException ex)
+                    {
+                        log.LogWarning(ex, "Parcel centres unavailable; comparables not measured by distance");
+                    }
+                }
+
                 var set = ComparableAnalyzer.Analyze(rawSales, record, suburb,
                     DateOnly.FromDateTime(DateTime.UtcNow), rules);
+                var ownSale = rawSales.Where(c => c.Exclusion == ComparableExclusion.IsSubject && c.SalePriceZar > 0)
+                    .OrderByDescending(c => c.SaleDate).FirstOrDefault();
+                if (ownSale is not null) record = record with { LastSale = new SaleRecord(ownSale.SaleDate, ownSale.SalePriceZar) };
 
                 log.LogInformation("Erf {Erf}: {Raw} raw sales → {Kept} kept (R0: {Zero}, old: {Old}, size: {Size})",
                     parcel.Erf, set.All.Count, set.Included.Count, set.ExcludedZeroPrice, set.ExcludedTooOld, set.ExcludedDissimilar);
