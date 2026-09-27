@@ -27,6 +27,8 @@ public sealed class Property24Tests(ITestOutputHelper output)
         marais.ErfM2.Should().Be(500);
         marais.Url.Should().Be("https://www.property24.com/for-sale/strand-north/strand/western-cape/7819/117574306");
         marais.ImageUrl.Should().StartWith("https://images.prop24.com/");
+        // Lazy-loaded tiles keep the photo in lazy-src; src is a /blank.gif placeholder.
+        listings.Should().OnlyContain(l => l.ImageUrl != null && l.ImageUrl.StartsWith("https://images.prop24.com/"));
     }
 
     [Fact]

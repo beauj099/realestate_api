@@ -177,9 +177,22 @@ namespace PropertyData.Listings
                     Parking: IntOf(Feature("Parking Spaces")) ?? IntOf(Feature("Garages")),
                     FloorM2: NumberOf(Feature("Floor Size")),
                     ErfM2: NumberOf(Feature("Erf Size")),
-                    ImageUrl: tile.SelectSingleNode(".//img[contains(@class,'js_P24_listingImage')]")?.GetAttributeValue("src", null)));
+                    ImageUrl: MainImage(tile)));
             }
             return result.DistinctBy(l => l.ListingNumber).ToList();
+        }
+
+        /// <summary>The main photo; lazy-loaded tiles hold it in lazy-src (src is /blank.gif).</summary>
+        private static string? MainImage(HtmlNode tile)
+        {
+            var img = tile.SelectSingleNode(".//img[contains(@class,'js_P24_listingImage')]");
+            if (img is null) return null;
+            foreach (var attribute in new[] { "lazy-src", "data-src", "src" })
+            {
+                var url = img.GetAttributeValue(attribute, null);
+                if (url is not null && url.StartsWith("http", StringComparison.OrdinalIgnoreCase)) return url;
+            }
+            return null;
         }
 
         public static (DateOnly? ListedOn, double? FloorM2, double? ErfM2) ParseDetailsText(string text)
