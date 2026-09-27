@@ -6,10 +6,19 @@ using Microsoft.Extensions.Caching.Memory;
 namespace RealEstateApi.Application.Services;
 
 public record ClimateDto(double MeanC, double AvgMaxC, double AvgMinC, double AnnualRainMm, string HottestMonth,
-    double HottestAvgMaxC, string ColdestMonth, double ColdestAvgMinC, string Years, string Source);
+    double HottestAvgMaxC, string ColdestMonth, double ColdestAvgMinC, string Years, string Source)
+{
+    public double? HumidityPct { get; init; }
+}
 
 public record PopulationDto(string? MainPlace, string? SubPlace, int? Population, int? Households, double? AreaKm2,
-    double? PeoplePerKm2, string Municipality, int? MunicipalityPopulation, string Year, string Source);
+    double? PeoplePerKm2, string Municipality, int? MunicipalityPopulation, string Year, string Source)
+{
+    /// <summary>A more recent estimate for the same sub place (WorldPop), when available.</summary>
+    public int? EstimatedPopulation { get; init; }
+    public string? EstimateYear { get; init; }
+    public string? EstimateSource { get; init; }
+}
 
 public record IncomeBandDto(string Label, double Percent);
 
@@ -39,6 +48,10 @@ public class AreaDetailsService(IHttpClientFactory httpFactory, IMemoryCache cac
     private const string NasaPower = "https://power.larc.nasa.gov/api/temporal/daily/point";
     private const string CensusApi = "https://census-api.frith.dev/graphql";
     private const string StatsSaApi = "https://disseminationapi-a2f6fff8f7a3f3ff.z01.azurefd.net/api";
+    private const string SubPlaces =
+        "https://services3.arcgis.com/GMycIhSIBQnnjV35/arcgis/rest/services/Census_2011_Sub_Places_of_South_Africa/FeatureServer/0/query";
+    private const string WorldPop = "https://api.worldpop.org/v1/services/stats";
+    private const int WorldPopYear = 2020;
     private const string PoliceBoundaries =
         "https://services8.arcgis.com/oTalEaSXAuyNT7xf/arcgis/rest/services/SA_Police_Boundaries/FeatureServer/0/query";
 
@@ -84,13 +97,16 @@ public class AreaDetailsService(IHttpClientFactory httpFactory, IMemoryCache cac
     {
         var endYear = DateTime.UtcNow.Year - 1;
         var startYear = endYear - 9;
-        var url = $"{NasaPower}?parameters=T2M,T2M_MAX,T2M_MIN,PRECTOTCORR&community=RE" +
+        var url = $"{NasaPower}?parameters=T2M,T2M_MAX,T2M_MIN,PRECTOTCORR,RH2M&community=RE" +
                   $"&longitude={lng.ToString(CultureInfo.InvariantCulture)}&latitude={lat.ToString(CultureInfo.InvariantCulture)}" +
                   $"&start={startYear}0101&end={endYear}1231&format=JSON";
         using var doc = JsonDocument.Parse(await Http().GetStringAsync(url, ct));
         var p = doc.RootElement.GetProperty("properties").GetProperty("parameter");
+        var humidity = Series(p, "RH2M");
         return SummariseClimate(Series(p, "T2M"), Series(p, "T2M_MAX"), Series(p, "T2M_MIN"), Series(p, "PRECTOTCORR"),
-            $"{startYear}–{endYear}");
+            $"{startYear}–{endYear}") is { } climate
+            ? climate with { HumidityPct = humidity.Count > 0 ? Math.Round(humidity.Values.Average()) : null }
+            : null;
     }
 
     private static Dictionary<DateOnly, double> Series(JsonElement parameters, string name) =>
@@ -148,7 +164,49 @@ public class AreaDetailsService(IHttpClientFactory httpFactory, IMemoryCache cac
             sub.Population is { } people && sub.Area is > 0 ? Math.Round(people / sub.Area.Value) : null,
             muni.Name ?? "", muni.Population, "2011",
             "Statistics South Africa, Census 2011 (via census-api.frith.dev)");
+        var estimate = await WorldPopEstimateAsync(lat, lng, ct);
+        if (estimate is { } estimated)
+            dto = dto with
+            {
+                EstimatedPopulation = estimated,
+                EstimateYear = WorldPopYear.ToString(CultureInfo.InvariantCulture),
+                EstimateSource = "WorldPop (CC BY 4.0), for the same sub place",
+            };
         return new CensusResult(dto, string.IsNullOrEmpty(muni.Code) ? null : muni.Code);
+    }
+
+    /// <summary>
+    /// WorldPop's estimate for the Census sub place containing the point: the sub place outline
+    /// (Census 2011, UCT Libraries) sent to WorldPop's zonal statistics. Null on any failure.
+    /// </summary>
+    private async Task<int?> WorldPopEstimateAsync(double lat, double lng, CancellationToken ct)
+    {
+        try
+        {
+            var outline = await Http().GetStringAsync(
+                $"{SubPlaces}?geometry={lng.ToString(CultureInfo.InvariantCulture)},{lat.ToString(CultureInfo.InvariantCulture)}" +
+                "&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=SP_CODE" +
+                "&returnGeometry=true&outSR=4326&geometryPrecision=6&f=geojson", ct);
+            using var geo = JsonDocument.Parse(outline);
+            var features = geo.RootElement.GetProperty("features");
+            if (features.GetArrayLength() == 0) return null;
+            var collection = JsonSerializer.Serialize(new
+            {
+                type = "FeatureCollection",
+                features = new[] { new { type = "Feature", properties = new { }, geometry = features[0].GetProperty("geometry") } },
+            });
+            var url = $"{WorldPop}?dataset=wpgppop&year={WorldPopYear}&runasync=false&geojson={Uri.EscapeDataString(collection)}";
+            using var doc = JsonDocument.Parse(await Http().GetStringAsync(url, ct));
+            return doc.RootElement.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Object
+                   && data.TryGetProperty("total_population", out var total) && total.ValueKind == JsonValueKind.Number
+                ? (int)Math.Round(total.GetDouble())
+                : null;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException or TaskCanceledException or KeyNotFoundException)
+        {
+            log.LogInformation(ex, "WorldPop estimate unavailable");
+            return null;
+        }
     }
 
     // ---- income: Census 2011 household income bands by municipality --------------------------
