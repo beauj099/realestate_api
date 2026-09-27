@@ -19,12 +19,15 @@ public class PropertyReportController : ControllerBase
     private readonly PropertyReportService _reports;
     private readonly ImageryLinkBuilder _imagery;
     private readonly IHttpClientFactory _httpFactory;
+    private readonly ForSaleListingsService _forSale;
 
-    public PropertyReportController(PropertyReportService reports, ImageryLinkBuilder imagery, IHttpClientFactory httpFactory)
+    public PropertyReportController(PropertyReportService reports, ImageryLinkBuilder imagery, IHttpClientFactory httpFactory,
+        ForSaleListingsService forSale)
     {
         _reports = reports;
         _imagery = imagery;
         _httpFactory = httpFactory;
+        _forSale = forSale;
     }
 
     /// <summary>
@@ -97,6 +100,35 @@ public class PropertyReportController : ControllerBase
         catch (HttpRequestException)
         {
             return CityUnavailable();
+        }
+    }
+
+    /// <summary>
+    /// Homes for sale like this one, from Property24 (credited and linked there): the listings in
+    /// the property's suburb most alike in bedrooms and size. <paramref name="p24Suburb"/> picks
+    /// a different Property24 suburb from the ones offered.
+    /// </summary>
+    [HttpGet("{municipality}/{erf}/for-sale")]
+    public async Task<IActionResult> GetForSale(string municipality, string erf, [FromQuery] string suburb,
+        [FromQuery] string? township, [FromQuery] int? p24Suburb, [FromQuery] int? bedrooms,
+        [FromQuery] double? floorM2, [FromQuery] double? erfM2, [FromQuery] int max = 3,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(suburb)) return ValidationFailed("suburb", "The report's suburb is required.");
+        try
+        {
+            return Ok(await _forSale.FindAsync(municipality, suburb, township, p24Suburb, bedrooms, floorM2, erfM2, max,
+                cancellationToken));
+        }
+        catch (HttpRequestException)
+        {
+            return StatusCode(StatusCodes.Status502BadGateway, new ProblemDetails
+            {
+                Type = "https://httpstatuses.io/502",
+                Title = "Property24 unavailable",
+                Status = StatusCodes.Status502BadGateway,
+                Detail = "Property24 did not respond. Try again in a few minutes.",
+            });
         }
     }
 
