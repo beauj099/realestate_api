@@ -27,10 +27,10 @@ public class ForSaleListingsService(Property24Client p24, ILogger<ForSaleListing
         int? bedrooms, double? floorM2, double? erfM2, int max, CancellationToken ct)
     {
         max = Math.Clamp(max, 1, MaxListings);
-        var all = await p24.SuburbsAsync(ct);
+        // A known Property24 suburb needs no suburb list: its id makes the page address.
         var suburbs = suburbId is { } id
-            ? all.Where(s => s.Id == id).ToList()
-            : Property24Client.Match(all, suburb, township, ProvinceOf(municipality)).Take(3).ToList();
+            ? [Property24Client.ById(id, suburb, township)]
+            : Property24Client.Match(await p24.SuburbsAsync(ct), suburb, township, ProvinceOf(municipality)).Take(3).ToList();
 
         var listings = new List<P24Listing>();
         foreach (var s in suburbs)

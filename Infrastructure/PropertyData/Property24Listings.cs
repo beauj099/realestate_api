@@ -65,13 +65,37 @@ namespace PropertyData.Listings
             @"/houses-for-sale/(?<suburb>[a-z0-9-]+)/(?<town>[a-z0-9-]+)/(?<province>[a-z0-9-]+)/(?<id>\d+)",
             RegexOptions.Compiled);
 
-        /// <summary>Every suburb with houses for sale; refreshed weekly.</summary>
+        /// <summary>Where the suburb list is kept between restarts (it is 3.6 MB to fetch).</summary>
+        public static string SuburbFile { get; set; } = Path.Combine(Path.GetTempPath(), "realworth-p24-suburbs.xml");
+
+        /// <summary>
+        /// Every suburb with houses for sale; refreshed weekly. Kept on disk too, so a restarted
+        /// API does not fetch the sitemap again, and an out-of-date copy beats none when
+        /// Property24 is busy.
+        /// </summary>
         public async Task<IReadOnlyList<P24Suburb>> SuburbsAsync(CancellationToken ct = default) =>
             (await cache.GetOrCreateAsync("p24:suburbs", async entry =>
             {
                 entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromDays(7);
-                return ParseSuburbs(await GetAsync(SuburbSitemap, ct));
+                var saved = new FileInfo(SuburbFile);
+                if (saved.Exists && saved.LastWriteTimeUtc > DateTime.UtcNow.AddDays(-7))
+                    return ParseSuburbs(await File.ReadAllTextAsync(saved.FullName, ct));
+                try
+                {
+                    var sitemap = await GetAsync(SuburbSitemap, ct);
+                    await File.WriteAllTextAsync(saved.FullName, sitemap, ct);
+                    return ParseSuburbs(sitemap);
+                }
+                catch (HttpRequestException) when (saved.Exists)
+                {
+                    log.LogWarning("Property24 suburb list unavailable; using the copy from {Date}", saved.LastWriteTimeUtc);
+                    return ParseSuburbs(await File.ReadAllTextAsync(saved.FullName, ct));
+                }
             }))!;
+
+        /// <summary>A suburb by its id alone: the page address only needs the id (the slugs are cosmetic).</summary>
+        public static P24Suburb ById(int id, string? name = null, string? town = null) =>
+            new(Slug(name ?? "suburb"), Slug(town ?? "town"), "province", id);
 
         public static IReadOnlyList<P24Suburb> ParseSuburbs(string sitemap) =>
             SuburbLoc.Matches(sitemap)
