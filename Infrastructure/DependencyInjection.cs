@@ -100,6 +100,7 @@ public static class DependencyInjection
         services.AddScoped<PasswordResetCodeRepository>();
         services.AddScoped<AgentComparableRepository>();
         services.AddScoped<RollBookRepository>();
+        services.AddScoped<AgentProfileRepository>();
 
         return services;
     }

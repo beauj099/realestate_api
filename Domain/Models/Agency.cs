@@ -17,4 +17,11 @@ public class Agency
     public int? CreatedByUserId { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
+    public string? OfficeName { get; set; }
+    public string? OfficeAddress { get; set; }
+    public string? OfficePhone { get; set; }
+    public string? OfficeEmail { get; set; }
+    public string? OfficeWebsite { get; set; }
+    public string? OfficeFooter { get; set; }
+    public string? BrochurePagesJson { get; set; }
 }
