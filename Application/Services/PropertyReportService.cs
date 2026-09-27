@@ -385,7 +385,7 @@ public class PropertyReportService(
                 var from = lo + width * i;
                 var to = i == 9 ? hi : from + width;
                 var n = sales.Count(c => (i == 0 || c.SalePriceZar >= from) && (i == 9 || c.SalePriceZar < to));
-                bands.Add(new PriceBandDto(Math.Round(from, -3), Math.Round(to, -3), n,
+                bands.Add(new PriceBandDto(Math.Round(from / 1000m) * 1000m, Math.Round(to / 1000m) * 1000m, n,
                     Math.Round(100.0 * n / sales.Count, 1)));
             }
         }
