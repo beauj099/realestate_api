@@ -69,6 +69,13 @@ public static class DependencyInjection
         services.AddScoped<global::PropertyData.Core.IPropertyDataProvider, global::PropertyData.MosselBay.MosselBayPropertyProvider>();
         // Municipalities with only PDF roll books (Drakenstein…): imported by tools/ImportRollBooks.
         services.AddScoped<global::PropertyData.Core.IPropertyDataProvider, global::PropertyData.RollBooks.RollBookPropertyProvider>();
+        // Area details: climate, census and crime sources.
+        services.AddHttpClient(AreaDetailsService.HttpClientName, c =>
+        {
+            c.Timeout = TimeSpan.FromSeconds(40);
+            c.DefaultRequestHeaders.UserAgent.ParseAdd(configuration.GetValue<string>("PropertyData:UserAgent")
+                ?? "RealWorth/1.0 (+https://api.realworth.co.za)");
+        });
         // Property24: homes for sale near a property (credited and linked to Property24).
         services.AddHttpClient<global::PropertyData.Listings.Property24Client>(c =>
         {
@@ -128,6 +135,7 @@ public static class DependencyInjection
         services.AddScoped<AgentComparableService>();
         services.AddScoped<DataSourceHealthService>();
         services.AddScoped<ForSaleListingsService>();
+        services.AddScoped<AreaDetailsService>();
         services.AddScoped<PropertyReportService>();
 
         return services;

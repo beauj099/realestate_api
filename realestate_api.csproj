@@ -47,4 +47,9 @@
     <Content Remove="dotnet-tools.json" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- SAPS figures per police precinct, built by tools/BuildCrimeStats. -->
+    <None Update="Infrastructure\PropertyData\Data\crime-stats.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

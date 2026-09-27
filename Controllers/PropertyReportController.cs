@@ -104,6 +104,19 @@ public class PropertyReportController : ControllerBase
     }
 
     /// <summary>
+    /// Area details for a point: climate, population and density, household income and crime,
+    /// each from its own free public source and each left out when that source is down.
+    /// </summary>
+    [HttpGet("area")]
+    public async Task<IActionResult> GetArea([FromQuery] double lat, [FromQuery] double lng,
+        [FromServices] AreaDetailsService area, CancellationToken cancellationToken)
+    {
+        if (lat is < -35.5 or > -21.5 || lng is < 16 or > 33.5)
+            return ValidationFailed("lat", "The point must be in South Africa.");
+        return Ok(await area.GetAsync(lat, lng, cancellationToken));
+    }
+
+    /// <summary>
     /// Homes for sale like this one, from Property24 (credited and linked there): the listings in
     /// the property's suburb most alike in bedrooms and size. <paramref name="p24Suburb"/> picks
     /// a different Property24 suburb from the ones offered.
