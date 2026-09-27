@@ -11,6 +11,8 @@ credentials needed. Background, endpoint reference and compliance rules:
 | `TshwanePropertyData.cs` | City of Tshwane: the national cadastre's parcel plus the City's GV2025 roll (value, category, registered size). Pins only; no sales |
 | `MosselBayPropertyData.cs` | Mossel Bay: the national cadastre's parcel plus the municipality's NDK online roll (street address, value, category, size). Pins only; no sales |
 | `RollBookParser.cs`, `RollBookCatalogue.cs`, `RollBookPropertyData.cs` | Rolls published only as PDF books (PenSoft layout; Drakenstein GV2024), imported by `tools/ImportRollBooks` into `dbo.RollBookEntries` and read for pins in those towns |
+| `Property24Listings.cs`, `Application/Services/ForSaleListingsService.cs` | Homes for sale like the subject from Property24 (robots.txt-allowed pages only, credited and linked); `GET /api/property/{municipality}/{erf}/for-sale` |
+| `Application/Services/AreaDetailsService.cs`, `Data/crime-stats.json` | Area details: NASA POWER climate, Census 2011 + WorldPop population, Census 2011 income, SAPS crime per precinct (`tools/BuildCrimeStats`, quarterly); `GET /api/property/area` |
 | `Application/Services/DataSourceHealthService.cs` | One known property per source; `GET /api/admin/data-sources/health` (Admin) and a monthly run that emails on failure |
 | `PropertyImagery.cs` | Google imagery links and the print rule (satellite printable with attribution, Street View screen-only) |
 | `Application/Services/PropertyReportService.cs` | Caching (12 h in memory: one report = one fetch) and the DTO the app reads |
@@ -74,6 +76,16 @@ Settings (`appsettings.Local.json` or environment variables):
   `RollBookCatalogue` once their footer says PenSoft (see `tools/ImportRollBooks/README.md`).
 - **Ekurhuleni is not scraped**: its portal states it is for property owners viewing their own
   values. Ask the City for an extract instead.
+
+- **Comparables are nearest first.** The City's area-sales list covers a whole neighbourhood
+  (all of Strand: 2 278 sales), so each sale is placed on the parcel map and kept within 500 m
+  (1 km when fewer than six are that close). Several erven transferred on one day for one price
+  are one bulk deal, not a price. Scaling price per m² straight up overvalues bigger homes;
+  sales are carried to the subject's size with an elasticity of 0.6.
+- **Property24** answers 503 when hit repeatedly; the suburb sitemap (3.6 MB) is kept on disk a
+  week, and a known suburb id needs no sitemap at all.
+- **Load-shedding** is not included: EskomSePush's free tier is non-commercial and there is no
+  free history. It needs their business licence first.
 
 ## Not done yet
 
