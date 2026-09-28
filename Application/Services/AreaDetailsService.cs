@@ -48,7 +48,26 @@ public record CrimeDto(string Precinct, int? Population, string Period, string P
 /// "Area details" for a report, each from its own free public source and each optional: a
 /// source being down leaves its block out, never the report.
 /// </summary>
-public record AreaDetailsDto(ClimateDto? Climate, PopulationDto? Population, IncomeDto? Income, CrimeDto? Crime);
+public record AreaDetailsDto(ClimateDto? Climate, PopulationDto? Population, IncomeDto? Income, CrimeDto? Crime)
+{
+    /// <summary>Schools, shops, health care, parks and more, nearest first, by group.</summary>
+    public IReadOnlyList<NearbyGroupDto>? Nearby { get; init; }
+
+    /// <summary>The municipality's drinking-water score in the Blue Drop report.</summary>
+    public WaterQualityDto? Water { get; init; }
+}
+
+public record NearbyPlaceDto(string Name, string Kind, double DistanceM, double Lat, double Lng);
+
+/// <summary>A group of nearby places ("schools"), nearest first.</summary>
+public record NearbyGroupDto(string Key, string Title, IReadOnlyList<NearbyPlaceDto> Places);
+
+/// <summary>
+/// The Water Services Authority's 2023 Blue Drop score: how well its drinking water is managed
+/// and treated, against the Department of Water and Sanitation's standards (95%+ is certified).
+/// </summary>
+public record WaterQualityDto(string Municipality, string Authority, double ScorePct, string Band, string Year,
+    string Source);
 
 /// <summary>
 /// Climate (NASA POWER, public domain), population (Census 2011 by sub place, via Adrian Frith's
@@ -72,20 +91,125 @@ public class AreaDetailsService(IHttpClientFactory httpFactory, IMemoryCache cac
 
     private static readonly TimeSpan Keep = TimeSpan.FromDays(30);
 
+    private const string Municipalities2016 =
+        "https://services9.arcgis.com/TEvFcL1UysF3gSue/arcgis/rest/services/ZA_LocalMunicipalities2016/FeatureServer/0/query";
+
+    /// <summary>
+    /// The groups of nearby places, each one Photon (OpenStreetMap) query: the key, the title,
+    /// the OSM kinds, how far to look (km) and how many to keep.
+    /// </summary>
+    public static readonly (string Key, string Title, string[] Tags, double RadiusKm, int Keep)[] NearbyGroups =
+    [
+        ("schools", "Schools", ["amenity:school"], 3, 4),
+        ("shopping", "Shopping", ["shop:mall", "shop:supermarket"], 3, 4),
+        ("health", "Health care", ["amenity:hospital", "amenity:clinic", "amenity:pharmacy"], 5, 4),
+        ("parks", "Parks and recreation", ["leisure:park", "leisure:sports_centre", "leisure:golf_course"], 3, 3),
+        ("beach", "Beach", ["natural:beach"], 5, 1),
+        ("transport", "Transport", ["railway:station", "amenity:bus_station"], 5, 2),
+        ("police", "Police", ["amenity:police"], 8, 1),
+    ];
+
     public async Task<AreaDetailsDto> GetAsync(double lat, double lng, CancellationToken ct)
     {
         var key = $"{Math.Round(lat, 3).ToString(CultureInfo.InvariantCulture)},{Math.Round(lng, 3).ToString(CultureInfo.InvariantCulture)}";
         var climate = Cached($"area:climate:{Math.Round(lat, 1)},{Math.Round(lng, 1)}", () => ClimateAsync(lat, lng, ct));
         var census = Cached($"area:census:{key}", () => CensusAsync(lat, lng, ct));
         var crime = Cached($"area:crime:{key}", () => CrimeAsync(lat, lng, ct));
-        await Task.WhenAll(climate, census, crime);
+        var nearby = NearbyCachedAsync(lat, lng, ct);
+        var water = Cached($"area:water:{Math.Round(lat, 2)},{Math.Round(lng, 2)}", () => WaterAsync(lat, lng, ct));
+        await Task.WhenAll(climate, census, crime, nearby, water);
 
         var population = census.Result;
         var income = population?.MunicipalityCode is { } muni
             ? await Cached($"area:income:{muni}", () => IncomeAsync(muni, population.Dto.Municipality, ct))
             : null;
-        return new AreaDetailsDto(climate.Result, population?.Dto, income, crime.Result);
+        return new AreaDetailsDto(climate.Result, population?.Dto, income, crime.Result)
+        {
+            Nearby = nearby.Result,
+            Water = water.Result,
+        };
     }
+
+    // ---- nearby places: OpenStreetMap through Photon -------------------------------------------
+
+    /// <summary>Nearby places around a point, cached a month per ~100 m (shared with the maps).</summary>
+    public Task<List<NearbyGroupDto>?> NearbyCachedAsync(double lat, double lng, CancellationToken ct) =>
+        Cached($"area:nearby:{Math.Round(lat, 3).ToString(CultureInfo.InvariantCulture)},{Math.Round(lng, 3).ToString(CultureInfo.InvariantCulture)}",
+            () => NearbyAsync(lat, lng, ct));
+
+    /// <summary>Each group asked in turn (Photon's fair-use terms), nearest first.</summary>
+    public async Task<List<NearbyGroupDto>?> NearbyAsync(double lat, double lng, CancellationToken ct)
+    {
+        var photon = new PropertyData.Geocoding.PhotonClient(Http());
+        var groups = new List<NearbyGroupDto>();
+        foreach (var (key, title, tags, radius, keep) in NearbyGroups)
+        {
+            List<(string Name, string Kind, double Lat, double Lng)> found;
+            try { found = await photon.NearbyAsync(lat, lng, tags, radius, keep * 3, ct); }
+            catch (HttpRequestException ex) { log.LogWarning(ex, "Nearby {Group} unavailable", key); continue; }
+            var places = found
+                .Select(p => new NearbyPlaceDto(p.Name, Kind(p.Kind),
+                    Math.Round(PropertyData.CapeTown.Internal.Geo.DistanceM(
+                        new PropertyData.Core.Models.LatLng(lat, lng), new PropertyData.Core.Models.LatLng(p.Lat, p.Lng))),
+                    p.Lat, p.Lng))
+                .OrderBy(p => p.DistanceM)
+                // The same place mapped twice (a school's grounds and its building).
+                .DistinctBy(p => p.Name.ToUpperInvariant())
+                .Take(keep)
+                .ToList();
+            if (places.Count > 0) groups.Add(new NearbyGroupDto(key, title, places));
+        }
+        return groups.Count == 0 ? null : groups;
+    }
+
+    /// <summary>"supermarket" → "Supermarket", "sports_centre" → "Sports centre".</summary>
+    private static string Kind(string osmValue) => osmValue switch
+    {
+        "" => "",
+        _ => char.ToUpperInvariant(osmValue[0]) + osmValue[1..].Replace('_', ' '),
+    };
+
+    // ---- drinking water: the 2023 Blue Drop report -----------------------------------------------
+
+    private static Dictionary<string, (string Municipality, string Authority, double Score)>? _blueDrop;
+    private static string _blueDropSource = "";
+
+    private Dictionary<string, (string Municipality, string Authority, double Score)> BlueDrop()
+    {
+        if (_blueDrop is not null) return _blueDrop;
+        using var doc = JsonDocument.Parse(File.ReadAllText(
+            Path.Combine(env.ContentRootPath, "Infrastructure", "PropertyData", "Data", "blue-drop-2023.json")));
+        _blueDropSource = doc.RootElement.GetProperty("source").GetString() ?? "";
+        return _blueDrop = doc.RootElement.GetProperty("byMunicipalityCode").EnumerateObject().ToDictionary(
+            m => m.Name,
+            m => (m.Value.GetProperty("municipality").GetString() ?? "",
+                  m.Value.GetProperty("authority").GetString() ?? "",
+                  m.Value.GetProperty("score").GetDouble()));
+    }
+
+    /// <summary>The municipality at the point (2016 boundaries, by code), then its authority's score.</summary>
+    private async Task<WaterQualityDto?> WaterAsync(double lat, double lng, CancellationToken ct)
+    {
+        var url = $"{Municipalities2016}?geometry={lng.ToString(CultureInfo.InvariantCulture)},{lat.ToString(CultureInfo.InvariantCulture)}" +
+                  "&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=CAT_B&returnGeometry=false&f=json";
+        using var doc = JsonDocument.Parse(await Http().GetStringAsync(url, ct));
+        var code = doc.RootElement.GetProperty("features").EnumerateArray()
+            .Select(f => f.GetProperty("attributes").GetProperty("CAT_B").GetString())
+            .FirstOrDefault();
+        if (code is null || !BlueDrop().TryGetValue(code, out var bd)) return null;
+        return new WaterQualityDto(bd.Municipality, bd.Authority, bd.Score, WaterBand(bd.Score), "2023", _blueDropSource);
+    }
+
+    /// <summary>The Blue Drop report's own performance categories.</summary>
+    public static string WaterBand(double score) => score switch
+    {
+        >= 95 => "Blue Drop certified",
+        >= 90 => "Excellent",
+        >= 80 => "Good",
+        >= 50 => "Average",
+        >= 31 => "Poor",
+        _ => "Critical",
+    };
 
     private async Task<T?> Cached<T>(string key, Func<Task<T?>> load) where T : class
     {

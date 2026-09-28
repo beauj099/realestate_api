@@ -105,6 +105,37 @@ public sealed class PhotonClient(HttpClient http)
     }
 
     /// <summary>
+    /// The nearest places of the given OSM kinds ("amenity:school", "shop:supermarket") within
+    /// <paramref name="radiusKm"/>, nearest first: name, kind and location.
+    /// </summary>
+    public async Task<List<(string Name, string Kind, double Lat, double Lng)>> NearbyAsync(double lat, double lng,
+        IEnumerable<string> osmTags, double radiusKm, int limit, CancellationToken ct)
+    {
+        var query = new List<string>
+        {
+            "lat=" + lat.ToString(CultureInfo.InvariantCulture),
+            "lon=" + lng.ToString(CultureInfo.InvariantCulture),
+            "radius=" + radiusKm.ToString(CultureInfo.InvariantCulture),
+            "limit=" + limit.ToString(CultureInfo.InvariantCulture),
+            "lang=en",
+        };
+        query.AddRange(osmTags.Select(t => "osm_tag=" + Uri.EscapeDataString(t)));
+        using var response = await http.GetAsync("https://photon.komoot.io/reverse?" + string.Join('&', query), ct);
+        response.EnsureSuccessStatusCode();
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+        var list = new List<(string, string, double, double)>();
+        foreach (var f in doc.RootElement.GetProperty("features").EnumerateArray())
+        {
+            var p = f.GetProperty("properties");
+            if (!p.TryGetProperty("name", out var n) || n.GetString() is not { Length: > 0 } name) continue;
+            var c = f.GetProperty("geometry").GetProperty("coordinates");
+            list.Add((name.Trim(), p.TryGetProperty("osm_value", out var v) ? v.GetString() ?? "" : "",
+                c[1].GetDouble(), c[0].GetDouble()));
+        }
+        return list;
+    }
+
+    /// <summary>
     /// Reads Photon's GeoJSON. Keeps South African streets, numbered houses and areas; a "house"
     /// without a number is a school, shop or landmark, not an address, and is dropped.
     /// </summary>

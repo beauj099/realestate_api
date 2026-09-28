@@ -50,6 +50,7 @@
   <ItemGroup>
     <!-- SAPS figures per police precinct, built by tools/BuildCrimeStats. -->
     <None Update="Infrastructure\PropertyData\Data\crime-stats.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Update="Infrastructure\PropertyData\Data\blue-drop-2023.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

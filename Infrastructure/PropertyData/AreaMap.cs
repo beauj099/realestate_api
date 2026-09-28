@@ -14,6 +14,9 @@ public sealed record MapRoad(string Name, string? Type, double? WidthM, IReadOnl
 /// <summary>A comparable sale on the map, numbered as in the report's table.</summary>
 public sealed record MapSale(int Number, string? Erf, LatLng Location);
 
+/// <summary>A nearby place (school, shop, clinic…) by its group key, drawn with that group's icon.</summary>
+public sealed record MapPlace(string Group, string Name, LatLng Location);
+
 public sealed record AreaMapInput(
     LatLng Centre,
     Ring? Subject,
@@ -26,7 +29,8 @@ public sealed record AreaMapInput(
     int WidthPx,
     int HeightPx,
     string Source,
-    bool Block = false);
+    bool Block = false,
+    IReadOnlyList<MapPlace>? Places = null);
 
 /// <summary>
 /// Draws the neighbourhood as an SVG map from municipal open data: every erf with its street
@@ -87,7 +91,7 @@ public static class AreaMapRenderer
         }
 
         // Street numbers where the erf is big enough on the page to hold one.
-        var numberSize = m.Block ? 12.0 : 6.5;
+        var numberSize = m.Block ? 8.5 : 6.5;
         foreach (var (p, pts) in parcels)
         {
             if (p.Number is null) continue;
@@ -103,7 +107,7 @@ public static class AreaMapRenderer
 
         // Road names, once per road, along its longest straight run on the map.
         var named = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var nameSize = m.Block ? 13.0 : 9.0;
+        var nameSize = m.Block ? 10.5 : 9.0;
         foreach (var group in roads.Where(r => r.Road.Name.Length > 0)
                      .GroupBy(r => r.Road.Name, StringComparer.OrdinalIgnoreCase)
                      .OrderByDescending(g => g.Max(r => IsMain(r.Road) ? 1 : 0)))
@@ -133,6 +137,22 @@ public static class AreaMapRenderer
             if (!Inside((x, y), w, h, 0)) continue;
             sb.Append(Pin(x, y, SaleStroke, s.Number.ToString(Inv), m.Block ? 1.3 : 1));
         }
+        // Nearby places with their group's icon and name.
+        var shownGroups = new List<string>();
+        foreach (var place in m.Places ?? [])
+        {
+            var (x, y) = Px(place.Location);
+            if (!Inside((x, y), w, h, 16) || !PlaceStyle.TryGetValue(place.Group, out var style)) continue;
+            if (!shownGroups.Contains(place.Group)) shownGroups.Add(place.Group);
+            sb.Append(Inv, $"""<circle cx="{F(x)}" cy="{F(y)}" r="11" fill="{style.Colour}" stroke="#FFFFFF" stroke-width="1.8"/>""");
+            sb.Append(Inv, $"""<g transform="translate({F(x - 7)} {F(y - 7)}) scale(0.583)" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="{style.Icon}"/></g>""");
+            var label = place.Name.Length > 28 ? place.Name[..27] + "…" : place.Name;
+            var tagW = label.Length * 5.6 + 10;
+            var tagX = x + 14 + tagW > w ? x - 14 - tagW : x + 14;
+            sb.Append(Inv, $"""<rect x="{F(tagX)}" y="{F(y - 8)}" width="{F(tagW)}" height="16" rx="4" fill="#FFFFFF" fill-opacity="0.92" stroke="{style.Colour}" stroke-width="0.8"/>""");
+            sb.Append(Inv, $"""<text x="{F(tagX + 5)}" y="{F(y + 3.5)}" font-size="10" fill="#2B3440">{Esc(label)}</text>""");
+        }
+
         var (sx, sy) = m.Subject is null ? (w / 2, h / 2) : Px(Geo.Centroid(m.Subject));
         sb.Append(HousePin(sx, sy, SubjectStroke, m.Block ? 1.3 : 1.1));
 
@@ -140,12 +160,20 @@ public static class AreaMapRenderer
         var legend = new List<(string Kind, string Text)> { ("subject", "This property") };
         if (m.Sales.Count > 0) legend.Add(("sale", "Comparable sale (numbered as in the table)"));
         if (m.RadiusM is { } r2) legend.Add(("radius", string.Create(Inv, $"Sales within {r2:0} m")));
+        foreach (var g in shownGroups) legend.Add(("place:" + g, PlaceStyle[g].Title));
         double lx = 14, ly = h - 16 - legend.Count * 19 - 10, lw = 250;
         sb.Append(Inv, $"""<rect x="{lx}" y="{F(ly)}" width="{lw}" height="{legend.Count * 19 + 14}" rx="6" fill="#FFFFFF" fill-opacity="0.94" stroke="#D5DCE4"/>""");
         for (int i = 0; i < legend.Count; i++)
         {
             double iy = ly + 16 + i * 19;
             var (kind, text) = legend[i];
+            if (kind.StartsWith("place:", StringComparison.Ordinal))
+            {
+                var style = PlaceStyle[kind[6..]];
+                sb.Append(Inv, $"""<circle cx="{lx + 17}" cy="{F(iy - 2.5)}" r="7" fill="{style.Colour}"/><g transform="translate({lx + 12.5} {F(iy - 7)}) scale(0.375)" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="{style.Icon}"/></g>""");
+                sb.Append(Inv, $"""<text x="{lx + 32}" y="{F(iy + 1)}" font-size="10.5" fill="#2B3440">{Esc(text)}</text>""");
+                continue;
+            }
             sb.Append(kind switch
             {
                 "subject" => string.Create(Inv, $"""<rect x="{lx + 10}" y="{F(iy - 8)}" width="14" height="11" fill="{SubjectFill}" stroke="{SubjectStroke}"/>"""),
@@ -169,6 +197,33 @@ public static class AreaMapRenderer
         sb.Append("</svg>");
         return sb.ToString();
     }
+
+    private static readonly Dictionary<string, string> Icons = new()
+    {
+        ["schools"] = "M22 9l-10 -4l-10 4l10 4l10 -4v6 M6 10.6v5.4a6 3 0 0 0 12 0v-5.4",
+        ["shopping"] = "M4 19a2 2 0 1 0 4 0a2 2 0 1 0 -4 0 M15 19a2 2 0 1 0 4 0a2 2 0 1 0 -4 0 M17 17h-11v-14h-2 M6 5l14 1l-1 7h-13",
+        ["health"] = "M8 8v-2a2 2 0 0 1 2 -2h4a2 2 0 0 1 2 2v2 M4 10a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v8a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2l0 -8 M10 14h4 M12 12v4",
+        ["parks"] = "M16 5l3 3l-2 1l4 4l-3 1l4 4h-9 M15 21l0 -3 M8 13l-2 -2 M8 12l2 -2 M8 21v-13 M5.824 16a3 3 0 0 1 -2.743 -3.69a3 3 0 0 1 .304 -4.833a3 3 0 0 1 4.615 -3.707a3 3 0 0 1 4.614 3.707a3 3 0 0 1 .305 4.833a3 3 0 0 1 -2.919 3.695h-4l-.176 -.005",
+        ["beach"] = "M17.553 16.75a7.5 7.5 0 0 0 -10.606 0 M18 3.804a6 6 0 0 0 -8.196 2.196l10.392 6a6 6 0 0 0 -2.196 -8.196 M16.732 10c1.658 -2.87 2.225 -5.644 1.268 -6.196c-.957 -.552 -3.075 1.326 -4.732 4.196 M15 9l-3 5.196 M3 19.25a2.4 2.4 0 0 1 1 -.25a2.4 2.4 0 0 1 2 1a2.4 2.4 0 0 0 2 1a2.4 2.4 0 0 0 2 -1a2.4 2.4 0 0 1 2 -1a2.4 2.4 0 0 1 2 1a2.4 2.4 0 0 0 2 1a2.4 2.4 0 0 0 2 -1a2.4 2.4 0 0 1 2 -1a2.4 2.4 0 0 1 1 .25",
+        ["transport"] = "M21 13c0 -3.87 -3.37 -7 -10 -7h-8 M3 15h16a2 2 0 0 0 2 -2 M3 6v5h17.5 M3 11v4 M8 11v-5 M13 11v-4.5 M3 19h18",
+        ["police"] = "M12 3a12 12 0 0 0 8.5 3a12 12 0 0 1 -8.5 15a12 12 0 0 1 -8.5 -15a12 12 0 0 0 8.5 -3",
+    };
+
+    /// <summary>
+    /// Each group of nearby places: its colour, legend title and icon (Tabler Icons, MIT: the
+    /// same line icons as the report pack).
+    /// </summary>
+    private static readonly Dictionary<string, (string Colour, string Title, string Icon)> PlaceStyle = new()
+    {
+        ["schools"] = ("#7B4FD6", "School", Icons["schools"]),
+        ["shopping"] = ("#E08A1E", "Shops", Icons["shopping"]),
+        ["health"] = ("#D93A4A", "Health care", Icons["health"]),
+        ["parks"] = ("#2E9E5B", "Park", Icons["parks"]),
+        ["beach"] = ("#1E9BD7", "Beach", Icons["beach"]),
+        ["transport"] = ("#4A5563", "Transport", Icons["transport"]),
+        ["police"] = ("#1F3A93", "Police", Icons["police"]),
+    };
+
 
     private static bool IsMain(MapRoad r) =>
         (r.WidthM ?? 0) >= 13 || (r.Type ?? "").Contains("Main", StringComparison.OrdinalIgnoreCase)

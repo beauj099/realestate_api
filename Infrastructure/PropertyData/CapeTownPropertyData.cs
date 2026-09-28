@@ -1419,7 +1419,15 @@ namespace PropertyData.CapeTown.Services
         {
             var v = values.OrderBy(x => x).ToList();
             if (v.Count == 0) return (0, 0);
-            decimal At(double q) => v[Math.Clamp((int)Math.Round(q * (v.Count - 1)), 0, v.Count - 1)];
+            // Interpolated between neighbours: with seven sales, rounding to a position picked the
+            // 3rd and 5th values (R 3.98m - R 4.05m), a range far narrower than the sales.
+            decimal At(double q)
+            {
+                var pos = q * (v.Count - 1);
+                var lo = (int)Math.Floor(pos);
+                var hi = Math.Min(lo + 1, v.Count - 1);
+                return v[lo] + (v[hi] - v[lo]) * (decimal)(pos - lo);
+            }
             return (At(0.25), At(0.75));
         }
 

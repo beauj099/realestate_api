@@ -25,6 +25,7 @@ public class PropertyReportService(
     IMemoryCache cache,
     ImageryLinkBuilder imagery,
     AgentComparableService agentComparables,
+    AreaDetailsService area,
     ILogger<PropertyReportService> log)
 {
     private static readonly TimeSpan RecordTtl = TimeSpan.FromHours(12);
@@ -206,8 +207,9 @@ public class PropertyReportService(
                 PropertyData.CapeTown.Clients.CapeTownSpatialClient.ErfKey(x.c.Erf), x.c.Location!))
             .ToList();
         var radius = record.Comparables?.RadiusM;
+        // The block view reaches about 250 m: the street, its neighbours and what is nearby.
         var extent = block
-            ? 70
+            ? 250
             : Math.Max(Math.Max(radius ?? 0, sales.Select(s => PropertyData.CapeTown.Internal.Geo.DistanceM(centre, s.Location)).DefaultIfEmpty(150).Max()), 150) * 1.08;
 
         // A box a little larger than the drawing, so erven at the edge are whole.
@@ -227,10 +229,24 @@ public class PropertyReportService(
             block ? sales.Where(s => PropertyData.CapeTown.Internal.Geo.DistanceM(centre, s.Location) <= extent).ToList() : sales,
             extent, block ? null : radius,
             width > 0 ? width : 900, height > 0 ? height : (block ? 560 : 900),
-            "Map: City of Cape Town open data (cadastre, road centrelines)",
-            Block: block));
+            block ? "Map: City of Cape Town open data; places: OpenStreetMap contributors"
+                  : "Map: City of Cape Town open data (cadastre, road centrelines)",
+            Block: block,
+            Places: block ? await NearbyPlacesAsync(centre, extent, ct) : null));
         cache.Set(key, svg, RecordTtl);
         return svg;
+    }
+
+    /// <summary>Nearby schools, shops, clinics and parks inside the map; none when unavailable.</summary>
+    private async Task<IReadOnlyList<PropertyData.AreaMaps.MapPlace>> NearbyPlacesAsync(LatLng centre, double extentM,
+        CancellationToken ct)
+    {
+        var groups = await area.NearbyCachedAsync(centre.Lat, centre.Lng, ct) ?? [];
+        return groups.SelectMany(g => g.Places
+                .Where(p => Math.Abs(p.Lat - centre.Lat) * 110_540 < extentM
+                            && Math.Abs(p.Lng - centre.Lng) * 111_320 * Math.Cos(centre.Lat * Math.PI / 180) < extentM * 1.5)
+                .Select(p => new PropertyData.AreaMaps.MapPlace(g.Key, p.Name, new LatLng(p.Lat, p.Lng))))
+            .ToList();
     }
 
     /// <summary>The property's centre, for imagery. Null when the cadastre has no boundary.</summary>
