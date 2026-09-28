@@ -83,14 +83,14 @@ public class AgentComparableService(AgentComparableRepository repository, ILogge
     /// </summary>
     public async Task<AgentComparablesSummaryDto?> ForReportAsync(int? userId, string municipality, string suburb,
         IReadOnlyList<MunicipalSale> municipalSales, string municipalSource, double? subjectFloorM2, double? subjectErfM2,
-        CancellationToken ct)
+        CancellationToken ct, double? lat = null, double? lng = null)
     {
         if (string.IsNullOrWhiteSpace(suburb)) return null;
         List<AgentComparable> sales;
         try
         {
             sales = (await repository.GetInAreaAsync(municipality.ToLowerInvariant(), suburb.Trim().ToUpperInvariant(),
-                DateTime.UtcNow.Date.AddMonths(-WindowMonths), ct)).ToList();
+                DateTime.UtcNow.Date.AddMonths(-WindowMonths), ct, lat, lng)).ToList();
 
             foreach (var sale in sales.Where(s => s.Verification == "Unverified"))
             {
@@ -117,13 +117,29 @@ public class AgentComparableService(AgentComparableRepository repository, ILogge
     }
 
     /// <summary>The agency's listings in a suburb (or the agent's own when they have no agency).</summary>
+    /// <summary>How far "nearby" reaches when the property's location is known.</summary>
+    public const double MarketRadiusM = 2000;
+
     public async Task<IReadOnlyList<MarketListingDto>> MarketAsync(int userId, string suburb, int? excludeListingId,
-        CancellationToken ct)
+        CancellationToken ct, double? lat = null, double? lng = null)
     {
         var today = DateTime.UtcNow.Date;
-        return (await repository.GetAgencyListingsInSuburbAsync(userId, suburb, excludeListingId, ct))
-            .Select(l =>
+        double? DistanceM(MarketListingRow l) =>
+            lat is null || lng is null || l.Latitude is null || l.Longitude is null ? null
+            : PropertyData.CapeTown.Internal.Geo.DistanceM(new PropertyData.Core.Models.LatLng(lat.Value, lng.Value),
+                new PropertyData.Core.Models.LatLng(l.Latitude.Value, l.Longitude.Value));
+        var rows = (await repository.GetAgencyListingsInSuburbAsync(userId, suburb, excludeListingId, ct, lat, lng,
+                MarketRadiusM))
+            .Select(l => (Row: l, Distance: DistanceM(l)))
+            // In the same-named suburb, or truly within reach (the box's corners are further).
+            .Where(x => x.Distance is null || x.Distance <= MarketRadiusM
+                        || string.Equals(x.Row.Suburb?.Trim(), suburb.Trim(), StringComparison.OrdinalIgnoreCase))
+            .OrderBy(x => x.Distance ?? double.MaxValue)
+            .ToList();
+        return rows
+            .Select(x =>
             {
+                var l = x.Row;
                 var start = l.ListDate ?? l.CreatedAt.Date;
                 var end = l.ArchivedAt?.Date ?? today;
                 var address = string.Join(" ", new[] { l.StreetNumber, l.Street }
@@ -141,7 +157,8 @@ public class AgentComparableService(AgentComparableRepository repository, ILogge
                     l.ListDate?.ToString("yyyy-MM-dd"),
                     Math.Max(0, (int)(end - start).TotalDays),
                     l.ListDate is null,
-                    l.ArchivedAt is not null);
+                    l.ArchivedAt is not null,
+                    x.Distance is null ? null : Math.Round(x.Distance.Value));
             })
             .ToList();
     }

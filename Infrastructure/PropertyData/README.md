@@ -11,7 +11,7 @@ credentials needed. Background, endpoint reference and compliance rules:
 | `TshwanePropertyData.cs` | City of Tshwane: the national cadastre's parcel plus the City's GV2025 roll (value, category, registered size). Pins only; no sales |
 | `MosselBayPropertyData.cs` | Mossel Bay: the national cadastre's parcel plus the municipality's NDK online roll (street address, value, category, size). Pins only; no sales |
 | `RollBookParser.cs`, `RollBookCatalogue.cs`, `RollBookPropertyData.cs` | Rolls published only as PDF books (PenSoft layout; Drakenstein GV2024), imported by `tools/ImportRollBooks` into `dbo.RollBookEntries` and read for pins in those towns |
-| `PhotonGeocoder.cs`, `Application/Services/AddressSearch*.cs` | Address type-ahead for all of South Africa: City records (`GET /api/property/suggest`) and Photon/OpenStreetMap (`…/suggest/national`), ranked on one scale (`AddressSearch.Rank`/`Order`) so the app can merge them |
+| `PhotonGeocoder.cs`, `Application/Services/AddressSearch*.cs` | Address type-ahead for all of South Africa: City records (`GET /api/property/suggest`) and Photon/OpenStreetMap (`…/suggest/national`), ranked on one scale (`AddressSearch.Rank`/`Order`) so the app can merge them; `…/suggest/at?lat&lng` gives the City's address for the erf under a GPS pin (Cape Town, Johannesburg) |
 | `Property24Listings.cs`, `Application/Services/ForSaleListingsService.cs` | Homes for sale like the subject from Property24 (robots.txt-allowed pages only, credited and linked); `GET /api/property/{municipality}/{erf}/for-sale` |
 | `Application/Services/AreaDetailsService.cs`, `Data/crime-stats.json` | Area details: NASA POWER climate, Census 2011 + WorldPop population, Census 2011 income, SAPS crime per precinct (`tools/BuildCrimeStats`, quarterly); `GET /api/property/area` |
 | `Application/Services/DataSourceHealthService.cs` | One known property per source; `GET /api/admin/data-sources/health` (Admin) and a monthly run that emails on failure |
@@ -83,6 +83,11 @@ Settings (`appsettings.Local.json` or environment variables):
   (1 km when fewer than six are that close). Several erven transferred on one day for one price
   are one bulk deal, not a price. Scaling price per m² straight up overvalues bigger homes;
   sales are carried to the subject's size with an elasticity of 0.6.
+- **Suburb names differ between sources** (the City's "Lynn's View" is partly Property24's
+  "Steynsrust"; OSM's "Die Vlakte" is the City's "Strand"). So Property24 homes are searched in the
+  suburb and Property24's own "surrounding suburbs", each listing's map position is read from its
+  page, and the nearest alike are kept (2.5 km, then 5 km); agency listings and agent-reported
+  sales also match by distance when the property's location is known.
 - **Property24** answers 503 when hit repeatedly; the suburb sitemap (3.6 MB) is kept on disk a
   week, and a known suburb id needs no sitemap at all.
 - **Load-shedding** is not included: EskomSePush's free tier is non-commercial and there is no

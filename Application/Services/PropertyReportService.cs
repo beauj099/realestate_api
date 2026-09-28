@@ -88,9 +88,33 @@ public class PropertyReportService(
                 var inSuburb = refs.Where(r => r.Suburb.StartsWith(suburb, StringComparison.OrdinalIgnoreCase)).ToList();
                 if (inSuburb.Count > 0) refs = inSuburb;
             }
+            // Suburb names differ between sources ("Die Vlakte" on a map is "Strand" to the City),
+            // so any place typed after the street counts: the suburb, else the town.
+            if (refs.Count > 1) refs = ByPlacesTyped(refs, request.Address);
         }
 
         return refs.Select(r => new PropertyCandidateDto(r.Municipality, r.Erf, r.Sg26, r.Suburb, r.Township)).ToList();
+    }
+
+    /// <summary>
+    /// Candidates in a place named after the street ("…, Die Vlakte, Strand") first: its suburb
+    /// or its township ("THE STRAND") matching any of the places typed.
+    /// </summary>
+    public static IReadOnlyList<PropertyRef> ByPlacesTyped(IReadOnlyList<PropertyRef> refs, string? address)
+    {
+        var places = (address ?? "").Split(',').Skip(1)
+            .Select(Key).Where(p => p.Length >= 3).ToList();
+        if (places.Count == 0) return refs;
+        static string Key(string s)
+        {
+            var k = new string(s.ToUpperInvariant().Where(c => char.IsLetterOrDigit(c) || c == ' ').ToArray()).Trim();
+            return k.StartsWith("THE ", StringComparison.Ordinal) ? k[4..] : k;
+        }
+        int Score(PropertyRef r) =>
+            places.Any(p => Key(r.Suburb).StartsWith(p, StringComparison.Ordinal)) ? 2
+            : places.Any(p => Key(r.Township).StartsWith(p, StringComparison.Ordinal)) ? 1
+            : 0;
+        return refs.OrderByDescending(Score).ToList();
     }
 
     private static string? TypedSuburb(ResolvePropertyRequest request)
@@ -140,7 +164,8 @@ public class PropertyReportService(
             .Select(c => new MunicipalSale(c.Address, c.Erf, c.SaleDate, c.SalePriceZar))
             .ToList() ?? [];
         var agentSales = await agentComparables.ForReportAsync(userId, record.Ref.Municipality, record.Ref.Suburb,
-            municipalSales, record.DataSource, record.DwellingExtentM2, record.BestExtentM2, ct);
+            municipalSales, record.DataSource, record.DwellingExtentM2, record.BestExtentM2, ct,
+            record.Location?.Lat, record.Location?.Lng);
         return report with { AgentComparables = agentSales };
     }
 

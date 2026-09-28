@@ -263,6 +263,19 @@ namespace PropertyData.CapeTown.Internal
             return Math.Abs(s / 2.0);
         }
 
+        /// <summary>
+        /// Addresses from a GPS point: the parcel the point is on first, then the parcels within
+        /// <paramref name="radiusM"/> nearest first (a phone's fix is often on the pavement or the
+        /// neighbour's side of the fence).
+        /// </summary>
+        public static List<T> NearestFirst<T>(IEnumerable<(T Item, Ring? Ring)> parcels, LatLng pt) =>
+            parcels
+                .Select(p => (p.Item, Inside: p.Ring is not null && Contains(p.Ring, pt),
+                    Metres: p.Ring is null ? double.MaxValue : DistanceM(Centroid(p.Ring), pt)))
+                .OrderByDescending(p => p.Inside).ThenBy(p => p.Metres)
+                .Select(p => p.Item)
+                .ToList();
+
         /// <summary>Great-circle distance in metres (haversine; plenty at neighbourhood scale).</summary>
         public static double DistanceM(LatLng a, LatLng b)
         {
@@ -754,21 +767,48 @@ namespace PropertyData.CapeTown.Clients
                 ["resultRecordCount"] = limit.ToString(CultureInfo.InvariantCulture),
             }, ct, singlePage: true);
 
-            var list = feats.Select(f =>
-            {
-                var at = f.GetProperty("attributes");
-                var ring = ArcGisClient.ReadRing(f);
-                var sfx = ArcGisClient.Str(at, "ADR_NO_SFX");
-                return new AddressSuggestion(
-                    (int?)ArcGisClient.Num(at, "ADR_NO"), string.IsNullOrWhiteSpace(sfx) ? null : sfx,
-                    ArcGisClient.Str(at, "STR_NAME") ?? "", ArcGisClient.Str(at, "LU_STR_NAME_TYPE"),
-                    ArcGisClient.Str(at, "OFC_SBRB_NAME") ?? "",
-                    ArcGisClient.Str(at, "PRTY_NMBR"), ArcGisClient.Str(at, "SG26_CODE"),
-                    ring is null ? null : Geo.Centroid(ring));
-            });
+            var list = feats.Select(f => ToSuggestion(f, ArcGisClient.ReadRing(f)));
             // "17B": prefer the matching suffix, keep the rest after it.
             return suffix is null ? list.ToList()
                 : list.OrderByDescending(s => string.Equals(s.StreetNumberSuffix, suffix, StringComparison.OrdinalIgnoreCase)).ToList();
+        }
+
+        private static AddressSuggestion ToSuggestion(JsonElement f, Ring? ring)
+        {
+            var at = f.GetProperty("attributes");
+            var sfx = ArcGisClient.Str(at, "ADR_NO_SFX");
+            return new AddressSuggestion(
+                (int?)ArcGisClient.Num(at, "ADR_NO"), string.IsNullOrWhiteSpace(sfx) ? null : sfx,
+                ArcGisClient.Str(at, "STR_NAME") ?? "", ArcGisClient.Str(at, "LU_STR_NAME_TYPE"),
+                ArcGisClient.Str(at, "OFC_SBRB_NAME") ?? "",
+                ArcGisClient.Str(at, "PRTY_NMBR"), ArcGisClient.Str(at, "SG26_CODE"),
+                ring is null ? null : Geo.Centroid(ring));
+        }
+
+        /// <summary>
+        /// The City's address for a GPS point: the parcel it is on, then the nearest within
+        /// <paramref name="radiusM"/> — with the house number, street and official suburb.
+        /// </summary>
+        public async Task<List<AddressSuggestion>> AddressesAtAsync(LatLng pt, double radiusM = 30,
+            CancellationToken ct = default)
+        {
+            var feats = await arc.QueryAsync(ParcelsLayer, new Dictionary<string, string>
+            {
+                ["geometry"] = JsonSerializer.Serialize(new { x = pt.Lng, y = pt.Lat, spatialReference = new { wkid = 4326 } }),
+                ["geometryType"] = "esriGeometryPoint",
+                ["inSR"] = "4326",
+                ["distance"] = radiusM.ToString(CultureInfo.InvariantCulture),
+                ["units"] = "esriSRUnit_Meter",
+                ["spatialRel"] = "esriSpatialRelIntersects",
+                ["outFields"] = ParcelFields,
+                ["returnGeometry"] = "true",
+                ["outSR"] = "4326",
+            }, ct, singlePage: true);
+            return Geo.NearestFirst(feats.Select(f =>
+            {
+                var ring = ArcGisClient.ReadRing(f);
+                return (ToSuggestion(f, ring), ring);
+            }), pt);
         }
 
         public async Task<List<ParcelHit>> FindByErfAsync(string erf, string? suburb, CancellationToken ct = default)

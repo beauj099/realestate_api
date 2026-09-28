@@ -42,6 +42,16 @@ public class PropertyReportController : ControllerBase
         Ok(await search.CityAsync(q ?? "", lat, lng, cancellationToken));
 
     /// <summary>
+    /// The City's address at a GPS point (Cape Town, Johannesburg): the erf under the pin, then
+    /// its nearest neighbours, with the house number and the City's official suburb. Empty
+    /// elsewhere.
+    /// </summary>
+    [HttpGet("suggest/at")]
+    public async Task<IActionResult> SuggestAt([FromQuery] double lat, [FromQuery] double lng,
+        [FromServices] AddressSearchService search, CancellationToken cancellationToken) =>
+        Ok(await search.AtAsync(lat, lng, cancellationToken));
+
+    /// <summary>
     /// The same search anywhere in South Africa, from OpenStreetMap (Photon): streets, numbered
     /// houses where mapped, suburbs and towns. Slower (seconds); ranked on the same scale as
     /// <see cref="Suggest"/>.
@@ -128,13 +138,14 @@ public class PropertyReportController : ControllerBase
     public async Task<IActionResult> GetForSale(string municipality, string erf, [FromQuery] string suburb,
         [FromQuery] string? township, [FromQuery] int? p24Suburb, [FromQuery] int? bedrooms,
         [FromQuery] double? floorM2, [FromQuery] double? erfM2, [FromQuery] int max = 3,
+        [FromQuery] double? lat = null, [FromQuery] double? lng = null,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(suburb)) return ValidationFailed("suburb", "The report's suburb is required.");
         try
         {
             return Ok(await _forSale.FindAsync(municipality, suburb, township, p24Suburb, bedrooms, floorM2, erfM2, max,
-                cancellationToken));
+                cancellationToken, lat, lng));
         }
         catch (HttpRequestException)
         {

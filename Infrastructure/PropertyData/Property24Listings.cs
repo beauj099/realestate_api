@@ -13,7 +13,12 @@
 //   Listings /houses-for-sale/{suburb}/{town}/{province}/{id}: ~20 tiles, each with the listing
 //            number, link, price (itemprop content), title ("5 Bedroom House"), address, bedrooms,
 //            bathrooms, parking, erf or floor size and the main photo.
-//   Listing  /for-sale/…/{id}/{listingNumber}: "Listing Date 29 August 2026", "Floor Size 300 m²".
+//   Listing  /for-sale/…/{id}/{listingNumber}: "Listing Date 29 August 2026", "Floor Size 300 m²",
+//            and the listing's map position ("Latitude":-34.06,"Longitude":18.81).
+//   Surrounding  each suburb page's "Add Surrounding Suburbs" box names its neighbours
+//            (input name="surroundingAreas" value="{id}", label "Heldervue (15)"). Suburb names
+//            differ between sources (the City's "Lynn's View" is partly Property24's
+//            "Steynsrust"), so a report searches the neighbours too and keeps what is nearest.
 //
 // Property24 splits suburbs more finely than the City (Strand North / Central / South, where the
 // City has "Strand"), so a suburb matches by name within its town, or by prefix.
@@ -50,7 +55,15 @@ namespace PropertyData.Listings
         double? FloorM2,
         double? ErfM2,
         string? ImageUrl,
-        DateOnly? ListedOn = null);
+        DateOnly? ListedOn = null,
+        double? Lat = null,
+        double? Lng = null);
+
+    /// <summary>A suburb Property24 lists as surrounding another, with its number of listings.</summary>
+    public sealed record P24Neighbour(int Id, string Name, int Count);
+
+    /// <summary>A suburb's first page: its listings and the suburbs Property24 calls surrounding.</summary>
+    public sealed record P24SuburbPage(IReadOnlyList<P24Listing> Listings, IReadOnlyList<P24Neighbour> Surrounding);
 
     public sealed class Property24Client(HttpClient http, IMemoryCache cache, ILogger<Property24Client> log)
     {
@@ -130,11 +143,30 @@ namespace PropertyData.Listings
 
         /// <summary>The first page of houses for sale in a suburb (about 20), cached six hours.</summary>
         public async Task<IReadOnlyList<P24Listing>> ListingsAsync(P24Suburb suburb, CancellationToken ct = default) =>
-            (await cache.GetOrCreateAsync($"p24:listings:{suburb.Id}", async entry =>
+            (await PageAsync(suburb, ct)).Listings;
+
+        /// <summary>A suburb's first page: listings and surrounding suburbs, cached six hours.</summary>
+        public async Task<P24SuburbPage> PageAsync(P24Suburb suburb, CancellationToken ct = default) =>
+            (await cache.GetOrCreateAsync($"p24:page:{suburb.Id}", async entry =>
             {
                 entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(6);
-                return ParseListings(await GetAsync(suburb.Url, ct));
+                var html = await GetAsync(suburb.Url, ct);
+                return new P24SuburbPage(ParseListings(html), ParseSurrounding(html));
             }))!;
+
+        private static readonly Regex SurroundingArea = new(
+            @"name=""surroundingAreas""\s+value=""(?<id>\d+)"".*?<label>(?<name>[^<]+)<span>\((?<count>\d+)\)",
+            RegexOptions.Compiled | RegexOptions.Singleline);
+
+        /// <summary>The "Add Surrounding Suburbs" box: Property24's own neighbours of a suburb.</summary>
+        public static IReadOnlyList<P24Neighbour> ParseSurrounding(string html) =>
+            SurroundingArea.Matches(html)
+                .Select(m => new P24Neighbour(
+                    int.Parse(m.Groups["id"].Value, CultureInfo.InvariantCulture),
+                    Clean(m.Groups["name"].Value),
+                    int.Parse(m.Groups["count"].Value, CultureInfo.InvariantCulture)))
+                .DistinctBy(n => n.Id)
+                .ToList();
 
         /// <summary>Fills in what only the listing's own page has: its date and sizes.</summary>
         public async Task<P24Listing> WithDetailsAsync(P24Listing listing, CancellationToken ct = default)
@@ -151,6 +183,8 @@ namespace PropertyData.Listings
                     ListedOn = detail!.ListedOn ?? listing.ListedOn,
                     FloorM2 = detail.FloorM2 ?? listing.FloorM2,
                     ErfM2 = detail.ErfM2 ?? listing.ErfM2,
+                    Lat = detail.Lat ?? listing.Lat,
+                    Lng = detail.Lng ?? listing.Lng,
                 };
             }
             catch (HttpRequestException ex)
@@ -229,16 +263,34 @@ namespace PropertyData.Listings
             return (listed, Size("Floor Size"), Size("Erf Size"));
         }
 
+        private static readonly Regex MapLat = new(@"""Latitude""\s*:\s*(-?\d+\.\d+)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        private static readonly Regex MapLng = new(@"""Longitude""\s*:\s*(-?\d+\.\d+)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+        /// <summary>
+        /// A listing's map position, when it has one inside South Africa. (Pages without one
+        /// carry the country's centre, about -30.97, 22.94, which is not a place.)
+        /// </summary>
+        public static (double? Lat, double? Lng) ParseLocation(string html)
+        {
+            if (MapLat.Match(html) is not { Success: true } a || MapLng.Match(html) is not { Success: true } b) return (null, null);
+            var lat = double.Parse(a.Groups[1].Value, CultureInfo.InvariantCulture);
+            var lng = double.Parse(b.Groups[1].Value, CultureInfo.InvariantCulture);
+            var inSouthAfrica = lat is < -22 and > -35.2 && lng is > 16 and < 33.2;
+            var countryCentre = Math.Abs(lat + 30.97) < 0.05 && Math.Abs(lng - 22.94) < 0.1;
+            return inSouthAfrica && !countryCentre ? (lat, lng) : (null, null);
+        }
+
         private static P24Details ParseDetails(string html)
         {
+            var (lat, lng) = ParseLocation(html);
             var doc = new HtmlDocument();
             doc.LoadHtml(html);
             foreach (var n in doc.DocumentNode.SelectNodes("//script|//style")?.ToList() ?? []) n.Remove();
             var (listed, floor, erf) = ParseDetailsText(Clean(doc.DocumentNode.InnerText));
-            return new P24Details(listed, floor, erf);
+            return new P24Details(listed, floor, erf, lat, lng);
         }
 
-        private sealed record P24Details(DateOnly? ListedOn, double? FloorM2, double? ErfM2);
+        private sealed record P24Details(DateOnly? ListedOn, double? FloorM2, double? ErfM2, double? Lat, double? Lng);
 
         private async Task<string> GetAsync(string url, CancellationToken ct)
         {

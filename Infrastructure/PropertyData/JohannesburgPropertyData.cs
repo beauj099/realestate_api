@@ -244,6 +244,35 @@ namespace PropertyData.Johannesburg
                 .OfType<string>().ToList();
         }
 
+        private static AddressSuggestion ToSuggestion(JsonElement f, Ring? ring)
+        {
+            var at = f.GetProperty("attributes");
+            var no = ArcGisClient.Str(at, "STREET_NO") ?? "";
+            var digits = new string(no.TakeWhile(char.IsDigit).ToArray());
+            return new AddressSuggestion(
+                int.TryParse(digits, out var n) ? n : null,
+                no.Length > digits.Length ? no[digits.Length..] : null,
+                ArcGisClient.Str(at, "STREET_NAME") ?? "", ArcGisClient.Str(at, "STREET_TYPE_NAME"),
+                ArcGisClient.Str(at, "TOWN_NAME_DESC") ?? "",
+                ArcGisClient.Str(at, "STAND_NO"), ArcGisClient.Str(at, "SG_ID"),
+                ring is null ? null : Geo.Centroid(ring));
+        }
+
+        /// <summary>The City's address for a GPS point: the stand it is on, then the nearest within the radius.</summary>
+        public async Task<List<AddressSuggestion>> AddressesAtAsync(LatLng pt, double radiusM = 30,
+            CancellationToken ct = default)
+        {
+            var form = PointQuery(pt, "SG_ID,STAND_NO,STREET_NO,STREET_NAME,STREET_TYPE_NAME,TOWN_NAME_DESC");
+            form["distance"] = radiusM.ToString(CultureInfo.InvariantCulture);
+            form["units"] = "esriSRUnit_Meter";
+            var feats = await arc.QueryAsync(StandsLayer, form, ct, singlePage: true);
+            return Geo.NearestFirst(feats.Select(f =>
+            {
+                var ring = ArcGisClient.ReadRing(f);
+                return (ToSuggestion(f, ring), ring);
+            }), pt);
+        }
+
         /// <summary>Type-ahead over stand addresses ("10 thirteenth", "10 thirteenth st park").</summary>
         public async Task<List<AddressSuggestion>> SuggestAsync(string text, int limit = 8, CancellationToken ct = default)
         {
@@ -286,20 +315,7 @@ namespace PropertyData.Johannesburg
                 ["resultRecordCount"] = limit.ToString(CultureInfo.InvariantCulture),
             }, ct, singlePage: true);
 
-            return feats.Select(f =>
-            {
-                var at = f.GetProperty("attributes");
-                var ring = ArcGisClient.ReadRing(f);
-                var no = ArcGisClient.Str(at, "STREET_NO") ?? "";
-                var digits = new string(no.TakeWhile(char.IsDigit).ToArray());
-                return new AddressSuggestion(
-                    int.TryParse(digits, out var n) ? n : null,
-                    no.Length > digits.Length ? no[digits.Length..] : null,
-                    ArcGisClient.Str(at, "STREET_NAME") ?? "", ArcGisClient.Str(at, "STREET_TYPE_NAME"),
-                    ArcGisClient.Str(at, "TOWN_NAME_DESC") ?? "",
-                    ArcGisClient.Str(at, "STAND_NO"), ArcGisClient.Str(at, "SG_ID"),
-                    ring is null ? null : Geo.Centroid(ring));
-            }).ToList();
+            return feats.Select(f => ToSuggestion(f, ArcGisClient.ReadRing(f))).ToList();
         }
 
         private async Task<List<BuildingFootprint>> GetFootprintsAsync(Ring parcel, CancellationToken ct)

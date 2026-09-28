@@ -89,6 +89,36 @@ public class AddressSearchService(
         return Finish(typed, found, lat, lng);
     }
 
+    /// <summary>
+    /// The City's address at a GPS point (Cape Town or Johannesburg): the erf the point is on,
+    /// then its nearest neighbours, each with the house number and the City's official suburb.
+    /// Empty elsewhere (the app then falls back to OpenStreetMap's reverse lookup).
+    /// </summary>
+    public async Task<IReadOnlyList<AddressSuggestionDto>> AtAsync(double lat, double lng, CancellationToken ct)
+    {
+        var pt = new PropertyData.Core.Models.LatLng(lat, lng);
+        async Task<List<CitySuggestion>> Safe(Func<Task<List<CitySuggestion>>> call)
+        {
+            try { return await call(); }
+            catch (HttpRequestException ex) { log.LogWarning(ex, "Address-at-point source did not answer"); return []; }
+            catch (TaskCanceledException) when (!ct.IsCancellationRequested) { return []; }
+        }
+        var ctTask = Safe(() => capeTown.AddressesAtAsync(pt, 30, ct));
+        var jhbTask = Safe(() => johannesburg.AddressesAtAsync(pt, 30, ct));
+        await Task.WhenAll(ctTask, jhbTask);
+
+        return ctTask.Result.Select(s => FromCity(s, PropertyReportService.CapeTown, "Cape Town", "Western Cape"))
+            .Concat(jhbTask.Result.Select(s => FromCity(s, PropertyReportService.Johannesburg, "Johannesburg", "Gauteng")))
+            .Where(s => s.StreetName.Length > 0)
+            .Take(3)
+            .Select(s =>
+            {
+                var title = AddressSearch.AddressTitle(null, s.StreetNumber, s.StreetName);
+                return s with { Title = title, Label = $"{title}, {s.Suburb}", Key = AddressSearch.DedupeKey(s with { Title = title }) };
+            })
+            .ToList();
+    }
+
     /// <summary>The unit and number typed go onto each suggestion; then rank, dedupe and trim.</summary>
     private static List<AddressSuggestionDto> Finish(TypedAddress typed, IEnumerable<AddressSuggestionDto> found,
         double? lat, double? lng)
