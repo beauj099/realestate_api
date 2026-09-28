@@ -72,7 +72,10 @@ namespace PropertyData.Listings
 
         private static readonly SemaphoreSlim Gate = new(1, 1);
         private static DateTimeOffset _lastCall;
-        private static readonly TimeSpan Pause = TimeSpan.FromMilliseconds(800);
+        private static readonly TimeSpan Pause = TimeSpan.FromMilliseconds(1500);
+
+        /// <summary>How long to wait before the one retry when Property24 answers 503 (busy).</summary>
+        private static readonly TimeSpan BusyBackOff = TimeSpan.FromSeconds(5);
 
         private static readonly Regex SuburbLoc = new(
             @"/houses-for-sale/(?<suburb>[a-z0-9-]+)/(?<town>[a-z0-9-]+)/(?<province>[a-z0-9-]+)/(?<id>\d+)",
@@ -299,7 +302,17 @@ namespace PropertyData.Listings
             {
                 var wait = _lastCall + Pause - DateTimeOffset.UtcNow;
                 if (wait > TimeSpan.Zero) await Task.Delay(wait, ct);
-                return await http.GetStringAsync(url, ct);
+                using var response = await http.GetAsync(url, ct);
+                if (response.StatusCode == HttpStatusCode.ServiceUnavailable)
+                {
+                    // Busy: back off once, then give up (the caller goes without).
+                    await Task.Delay(BusyBackOff, ct);
+                    using var retry = await http.GetAsync(url, ct);
+                    retry.EnsureSuccessStatusCode();
+                    return await retry.Content.ReadAsStringAsync(ct);
+                }
+                response.EnsureSuccessStatusCode();
+                return await response.Content.ReadAsStringAsync(ct);
             }
             finally
             {

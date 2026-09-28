@@ -117,6 +117,28 @@ public class PropertyReportController : ControllerBase
     }
 
     /// <summary>
+    /// The neighbourhood map (SVG, ours from City open data): <c>mode=area</c> the comparable
+    /// sales, numbered as in the report, in their radius; <c>mode=block</c> the property's block.
+    /// 404 outside Cape Town.
+    /// </summary>
+    [HttpGet("{municipality}/{erf}/area-map.svg")]
+    public async Task<IActionResult> GetAreaMap(string municipality, string erf, [FromQuery] string? suburb,
+        [FromQuery] string? sg26, [FromQuery] string mode = "area", [FromQuery] int width = 0, [FromQuery] int height = 0,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var svg = await _reports.GetAreaMapSvgAsync(municipality, erf, suburb, sg26,
+                string.Equals(mode, "block", StringComparison.OrdinalIgnoreCase), width, height, cancellationToken);
+            return svg is null ? NotFound() : Content(svg, "image/svg+xml", System.Text.Encoding.UTF8);
+        }
+        catch (HttpRequestException)
+        {
+            return CityUnavailable();
+        }
+    }
+
+    /// <summary>
     /// Area details for a point: climate, population and density, household income and crime,
     /// each from its own free public source and each left out when that source is down.
     /// </summary>
@@ -138,14 +160,14 @@ public class PropertyReportController : ControllerBase
     public async Task<IActionResult> GetForSale(string municipality, string erf, [FromQuery] string suburb,
         [FromQuery] string? township, [FromQuery] int? p24Suburb, [FromQuery] int? bedrooms,
         [FromQuery] double? floorM2, [FromQuery] double? erfM2, [FromQuery] int max = 3,
-        [FromQuery] double? lat = null, [FromQuery] double? lng = null,
+        [FromQuery] double? lat = null, [FromQuery] double? lng = null, [FromQuery] decimal? priceZar = null,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(suburb)) return ValidationFailed("suburb", "The report's suburb is required.");
         try
         {
             return Ok(await _forSale.FindAsync(municipality, suburb, township, p24Suburb, bedrooms, floorM2, erfM2, max,
-                cancellationToken, lat, lng));
+                cancellationToken, lat, lng, priceZar));
         }
         catch (HttpRequestException)
         {

@@ -181,6 +181,58 @@ public class PropertyReportService(
             HeightPx: height > 0 ? height : 650));
     }
 
+    /// <summary>
+    /// The neighbourhood map (SVG): <paramref name="block"/> false draws the comparable sales in
+    /// the radius they were drawn from; true draws the property's block close up. Cape Town only
+    /// (null elsewhere, where the parcels and roads are not published this way).
+    /// </summary>
+    public async Task<string?> GetAreaMapSvgAsync(string municipality, string erf, string? suburb, string? sg26,
+        bool block, int width, int height, CancellationToken ct)
+    {
+        if (!string.Equals(municipality, CapeTown, StringComparison.OrdinalIgnoreCase)) return null;
+        var key = $"areamap:{municipality}:{erf}:{(suburb ?? "").ToUpperInvariant()}:{block}:{width}x{height}";
+        if (cache.TryGetValue(key, out string? hit) && hit is not null) return hit;
+
+        var record = Cached(municipality, erf, suburb) is { Comparables: not null } cached
+            ? cached
+            : await GetRecordAsync(municipality, erf, suburb, sg26, new RecordOptions(), "full", ct);
+        if (record.Location is not { } centre) return null;
+
+        // Numbered as in the report's table: by place among the sales used.
+        var sales = (record.Comparables?.Included ?? [])
+            .Select((c, i) => (c, Number: i + 1))
+            .Where(x => x.c.Location is not null)
+            .Select(x => new PropertyData.AreaMaps.MapSale(x.Number,
+                PropertyData.CapeTown.Clients.CapeTownSpatialClient.ErfKey(x.c.Erf), x.c.Location!))
+            .ToList();
+        var radius = record.Comparables?.RadiusM;
+        var extent = block
+            ? 70
+            : Math.Max(Math.Max(radius ?? 0, sales.Select(s => PropertyData.CapeTown.Internal.Geo.DistanceM(centre, s.Location)).DefaultIfEmpty(150).Max()), 150) * 1.08;
+
+        // A box a little larger than the drawing, so erven at the edge are whole.
+        var dLat = extent * 1.15 / 110_540.0;
+        var dLng = extent * 1.15 / (111_320.0 * Math.Cos(centre.Lat * Math.PI / 180));
+        var sw = new LatLng(centre.Lat - dLat, centre.Lng - dLng);
+        var ne = new LatLng(centre.Lat + dLat, centre.Lng + dLng);
+        var parcels = await capeTown.GetParcelsInBoxAsync(sw, ne, ct);
+        List<(string Name, string? Type, double? WidthM, List<LatLng> Line)> roads;
+        try { roads = await capeTown.GetRoadsInBoxAsync(sw, ne, ct); }
+        catch (HttpRequestException ex) { log.LogWarning(ex, "Road centrelines unavailable; map without street names"); roads = []; }
+
+        var svg = PropertyData.AreaMaps.AreaMapRenderer.Render(new PropertyData.AreaMaps.AreaMapInput(
+            centre, record.Boundary, PropertyData.CapeTown.Clients.CapeTownSpatialClient.ErfKey(record.Ref.Erf),
+            parcels.Select(p => new PropertyData.AreaMaps.MapParcel(p.Erf, p.Number, p.Ring)).ToList(),
+            roads.Select(r => new PropertyData.AreaMaps.MapRoad(r.Name, r.Type, r.WidthM, r.Line)).ToList(),
+            block ? sales.Where(s => PropertyData.CapeTown.Internal.Geo.DistanceM(centre, s.Location) <= extent).ToList() : sales,
+            extent, block ? null : radius,
+            width > 0 ? width : 900, height > 0 ? height : (block ? 560 : 900),
+            "Map: City of Cape Town open data (cadastre, road centrelines)",
+            Block: block));
+        cache.Set(key, svg, RecordTtl);
+        return svg;
+    }
+
     /// <summary>The property's centre, for imagery. Null when the cadastre has no boundary.</summary>
     public async Task<LatLng?> GetLocationAsync(string municipality, string erf, string? suburb, string? sg26, CancellationToken ct)
     {
@@ -290,6 +342,11 @@ public class PropertyReportService(
         SitePlanUrl: $"/api/property/{r.Ref.Municipality}/{Uri.EscapeDataString(r.Ref.Erf)}/site-plan.svg" +
                      $"?suburb={Uri.EscapeDataString(r.Ref.Suburb)}" +
                      (r.Ref.Sg26 is null ? "" : $"&sg26={Uri.EscapeDataString(r.Ref.Sg26)}"),
+        AreaMapUrl: !string.Equals(r.Ref.Municipality, CapeTown, StringComparison.OrdinalIgnoreCase) || r.Location is null
+            ? null
+            : $"/api/property/{r.Ref.Municipality}/{Uri.EscapeDataString(r.Ref.Erf)}/area-map.svg" +
+              $"?suburb={Uri.EscapeDataString(r.Ref.Suburb)}" +
+              (r.Ref.Sg26 is null ? "" : $"&sg26={Uri.EscapeDataString(r.Ref.Sg26)}"),
         DataSource: r.DataSource,
         ComparablesMethod: MethodFor(r),
         CoverageNote: CoverageFor(r),

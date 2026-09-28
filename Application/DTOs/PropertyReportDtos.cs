@@ -127,4 +127,6 @@ public record PropertyReportDto(
     SaleRecordDto? LastSale = null,
     // The latest sales in the subject's own street, newest first.
     IReadOnlyList<ComparableDto>? StreetSales = null,
-    AreaMarketDto? AreaMarket = null);
+    AreaMarketDto? AreaMarket = null,
+    // The neighbourhood map (SVG); add "&mode=block" for the close-up. Null where not drawn.
+    string? AreaMapUrl = null);

@@ -571,13 +571,62 @@ namespace PropertyData.CapeTown.Clients
     public sealed class CapeTownSpatialClient(ArcGisClient arc, ILogger<CapeTownSpatialClient> log)
     {
         private const string Hosted = "https://services6.arcgis.com/nyYfO9SxHU2ChQd9/arcgis/rest/services";
-        private const string Server = "https://esapqa.capetown.gov.za/agsext/rest/services";
+        // The City's production map server (the open data portal still links "esapqa", a test host).
+        private const string Server = "https://citymaps.capetown.gov.za/agsext/rest/services";
 
         public const string ParcelsLayer    = $"{Hosted}/Property/FeatureServer/0";
         public const string ZoningLayer     = $"{Hosted}/Zoning/FeatureServer/0";
         public const string SuburbValLayer  = $"{Hosted}/Valuations_Suburbs_for_2022_and_2025/FeatureServer/0";
         public const string PlanApprovals   = $"{Hosted}/Building_Plan_Approvals_2014_to_2025/FeatureServer/0";
         public const string FootprintsLayer = $"{Server}/Theme_Based/ODP_SPLIT_6/FeatureServer/2";
+        public const string RoadsLayer      = $"{Server}/Theme_Based/ODP_SPLIT_6/FeatureServer/8";
+
+        private static Dictionary<string, string> BoxQuery(LatLng sw, LatLng ne, string fields) => new()
+        {
+            ["geometry"] = string.Create(CultureInfo.InvariantCulture, $"{sw.Lng},{sw.Lat},{ne.Lng},{ne.Lat}"),
+            ["geometryType"] = "esriGeometryEnvelope",
+            ["inSR"] = "4326",
+            ["spatialRel"] = "esriSpatialRelIntersects",
+            ["outFields"] = fields,
+            ["returnGeometry"] = "true",
+            ["outSR"] = "4326",
+            ["geometryPrecision"] = "6",
+        };
+
+        /// <summary>Every parcel in a box, with its erf and street number, for the area map.</summary>
+        public async Task<List<(string? Erf, string? Number, Ring Ring)>> GetParcelsInBoxAsync(LatLng sw, LatLng ne,
+            CancellationToken ct = default)
+        {
+            var feats = await arc.QueryAsync(ParcelsLayer, BoxQuery(sw, ne, "PRTY_NMBR,ADR_NO,ADR_NO_SFX"), ct);
+            var list = new List<(string?, string?, Ring)>(feats.Count);
+            foreach (var f in feats)
+            {
+                if (ArcGisClient.ReadRing(f) is not { } ring) continue;
+                var at = f.GetProperty("attributes");
+                var no = ArcGisClient.Num(at, "ADR_NO");
+                list.Add((ErfKey(ArcGisClient.Str(at, "PRTY_NMBR")),
+                    no is null or 0 ? null : $"{(int)no.Value}{ArcGisClient.Str(at, "ADR_NO_SFX")}", ring));
+            }
+            return list;
+        }
+
+        /// <summary>Road centrelines in a box, with their names and widths, for the area map.</summary>
+        public async Task<List<(string Name, string? Type, double? WidthM, List<LatLng> Line)>> GetRoadsInBoxAsync(
+            LatLng sw, LatLng ne, CancellationToken ct = default)
+        {
+            var feats = await arc.QueryAsync(RoadsLayer, BoxQuery(sw, ne, "ROAD_NAME,ROAD_TYPE,RD_WIDTH"), ct);
+            var list = new List<(string, string?, double?, List<LatLng>)>();
+            foreach (var f in feats)
+            {
+                if (!f.TryGetProperty("geometry", out var g) || !g.TryGetProperty("paths", out var paths)) continue;
+                var at = f.GetProperty("attributes");
+                var name = ArcGisClient.Str(at, "ROAD_NAME") ?? "";
+                foreach (var path in paths.EnumerateArray())
+                    list.Add((name, ArcGisClient.Str(at, "ROAD_TYPE"), ArcGisClient.Num(at, "RD_WIDTH"),
+                        path.EnumerateArray().Select(p => new LatLng(p[1].GetDouble(), p[0].GetDouble())).ToList()));
+            }
+            return list;
+        }
 
         private const string ParcelFields =
             "PRTY_NMBR,SG26_CODE,ZONING,WARD_NAME,SUB_CNCL_NMBR,LU_LGL_STS_DSCR,OFC_SBRB_NAME,ALT_NAME,ADR_NO,ADR_NO_SFX,STR_NAME,LU_STR_NAME_TYPE";
