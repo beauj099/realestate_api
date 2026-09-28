@@ -26,16 +26,17 @@ public class AgentProfileRepository(DbConnectionFactory connectionFactory)
                   Qualifications = @Qualifications, Website = @Website, PhotoUrl = @PhotoUrl,
                   SignatureUrl = @SignatureUrl, OfficeName = @OfficeName, OfficeAddress = @OfficeAddress,
                   OfficePhone = @OfficePhone, OfficeEmail = @OfficeEmail, OfficeWebsite = @OfficeWebsite,
-                  OfficeFooter = @OfficeFooter, BrochurePagesJson = @BrochurePagesJson,
+                  OfficeFooter = @OfficeFooter, OfficeSlogan = @OfficeSlogan, OfficeHeadline = @OfficeHeadline,
+                  OfficeLogosJson = @OfficeLogosJson, BrochurePagesJson = @BrochurePagesJson,
                   ReportSettingsJson = @ReportSettingsJson, UpdatedAt = GETUTCDATE()
               WHEN NOT MATCHED THEN INSERT
                   (UserId, AgencySlug, PpraNumber, JobTitle, Bio, Qualifications, Website, PhotoUrl, SignatureUrl,
                    OfficeName, OfficeAddress, OfficePhone, OfficeEmail, OfficeWebsite, OfficeFooter,
-                   BrochurePagesJson, ReportSettingsJson)
+                   OfficeSlogan, OfficeHeadline, OfficeLogosJson, BrochurePagesJson, ReportSettingsJson)
                   VALUES
                   (@UserId, @AgencySlug, @PpraNumber, @JobTitle, @Bio, @Qualifications, @Website, @PhotoUrl, @SignatureUrl,
                    @OfficeName, @OfficeAddress, @OfficePhone, @OfficeEmail, @OfficeWebsite, @OfficeFooter,
-                   @BrochurePagesJson, @ReportSettingsJson);",
+                   @OfficeSlogan, @OfficeHeadline, @OfficeLogosJson, @BrochurePagesJson, @ReportSettingsJson);",
             p, cancellationToken: ct));
     }
 }
