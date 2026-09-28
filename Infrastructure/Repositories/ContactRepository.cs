@@ -13,7 +13,7 @@ public class ContactRepository
         _connectionFactory = connectionFactory;
     }
 
-    private const string Columns = "Id, FullName, IdNumber, CompanyName, CompanyRegistrationNumber, MobilePhone, EmailAddress, Role, OwnerType, ListingId";
+    private const string Columns = "Id, FullName, IdNumber, CompanyName, CompanyRegistrationNumber, MobilePhone, EmailAddress, Role, OwnerType, ListingId, Title";
 
     public async Task<IEnumerable<Contact>> GetByListingIdAsync(int listingId, CancellationToken cancellationToken = default)
     {
@@ -40,9 +40,9 @@ public class ContactRepository
     {
         using var connection = _connectionFactory.CreateConnection();
         var command = new CommandDefinition(
-            $"INSERT INTO Contact (ListingId, FullName, IdNumber, CompanyName, CompanyRegistrationNumber, MobilePhone, EmailAddress, Role, OwnerType) " +
+            $"INSERT INTO Contact (ListingId, FullName, IdNumber, CompanyName, CompanyRegistrationNumber, MobilePhone, EmailAddress, Role, OwnerType, Title) " +
             $"OUTPUT INSERTED.{Columns.Replace(", ", ", INSERTED.")} " +
-            "VALUES (@ListingId, @FullName, @IdNumber, @CompanyName, @CompanyRegistrationNumber, @MobilePhone, @EmailAddress, @Role, @OwnerType)",
+            "VALUES (@ListingId, @FullName, @IdNumber, @CompanyName, @CompanyRegistrationNumber, @MobilePhone, @EmailAddress, @Role, @OwnerType, @Title)",
             contact, cancellationToken: cancellationToken);
         return await connection.QueryFirstOrDefaultAsync<Contact>(command);
     }
@@ -54,7 +54,7 @@ public class ContactRepository
             "UPDATE Contact SET FullName = COALESCE(@FullName, FullName), IdNumber = COALESCE(@IdNumber, IdNumber), " +
             "CompanyName = COALESCE(@CompanyName, CompanyName), CompanyRegistrationNumber = COALESCE(@CompanyRegistrationNumber, CompanyRegistrationNumber), " +
             "MobilePhone = COALESCE(@MobilePhone, MobilePhone), EmailAddress = COALESCE(@EmailAddress, EmailAddress), Role = COALESCE(@Role, Role), " +
-            "OwnerType = COALESCE(@OwnerType, OwnerType) " +
+            "OwnerType = COALESCE(@OwnerType, OwnerType), Title = COALESCE(@Title, Title) " +
             $"OUTPUT INSERTED.{Columns.Replace(", ", ", INSERTED.")} " +
             "WHERE Id = @Id",
             contact, cancellationToken: cancellationToken);
