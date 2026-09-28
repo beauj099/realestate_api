@@ -433,6 +433,19 @@ namespace PropertyData.CapeTown.Internal
                 typeAt < 0 ? null : string.Join(' ', tokens.Skip(typeAt + 1)));
         }
 
+        /// <summary>
+        /// The text as the start of a suburb name ("helder" → "HELDER"), or null when it cannot be
+        /// one: it starts with a street number, or is shorter than three letters.
+        /// </summary>
+        public static string? SuburbPrefix(string text)
+        {
+            var name = System.Text.RegularExpressions.Regex
+                .Replace(text.ToUpperInvariant(), @"[^A-Z ]", " ").Trim();
+            name = System.Text.RegularExpressions.Regex.Replace(name, @"\s+", " ");
+            if (name.Length < 3 || char.IsDigit(text.TrimStart().FirstOrDefault())) return null;
+            return name;
+        }
+
         /// <summary>"RD" → "ROAD"; null when the token is not a street type.</summary>
         public static string? CanonicalType(string token) => TypeSynonyms.GetValueOrDefault(token);
 
@@ -678,6 +691,24 @@ namespace PropertyData.CapeTown.Clients
             if (found.Count == 0 && words.Length > 2)
                 found = await SuggestOnceAsync(string.Join(' ', words[..^1]), limit, ct);
             return found;
+        }
+
+        /// <summary>Official suburb names starting with the text ("helder" → HELDERVUE).</summary>
+        public async Task<List<string>> SuggestSuburbsAsync(string text, int limit = 3, CancellationToken ct = default)
+        {
+            var name = AddressNormalizer.SuburbPrefix(text);
+            if (name is null) return [];
+            var feats = await arc.QueryAsync(ParcelsLayer, new Dictionary<string, string>
+            {
+                ["where"] = $"OFC_SBRB_NAME LIKE '{AddressNormalizer.SqlLiteral(name)}%'",
+                ["outFields"] = "OFC_SBRB_NAME",
+                ["returnDistinctValues"] = "true",
+                ["returnGeometry"] = "false",
+                ["orderByFields"] = "OFC_SBRB_NAME",
+                ["resultRecordCount"] = limit.ToString(CultureInfo.InvariantCulture),
+            }, ct, singlePage: true);
+            return feats.Select(f => ArcGisClient.Str(f.GetProperty("attributes"), "OFC_SBRB_NAME"))
+                .OfType<string>().ToList();
         }
 
         private async Task<List<AddressSuggestion>> SuggestOnceAsync(string text, int limit, CancellationToken ct)

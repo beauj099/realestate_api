@@ -31,22 +31,25 @@ public class PropertyReportController : ControllerBase
     }
 
     /// <summary>
-    /// Address type-ahead ("17 pine", "17 pine rd clar", "pine rd") from the City of Cape Town's
-    /// parcel records: up to 8 real addresses with their erf and location. The app debounces;
-    /// fewer than 3 characters returns nothing.
+    /// Address type-ahead ("bosm", "17 pine rd clar", "unit 5, 12 main") from the Cape Town and
+    /// Johannesburg parcel records: numbered addresses are real erfs with their location, plus
+    /// matching streets and suburbs. Fast; the app also asks <see cref="SuggestNational"/> and
+    /// merges the two. <paramref name="lat"/>/<paramref name="lng"/> (optional) favour nearby places.
     /// </summary>
     [HttpGet("suggest")]
-    public async Task<IActionResult> Suggest([FromQuery] string? q, CancellationToken cancellationToken)
-    {
-        try
-        {
-            return Ok(await _reports.SuggestAsync(q ?? "", cancellationToken));
-        }
-        catch (HttpRequestException)
-        {
-            return CityUnavailable();
-        }
-    }
+    public async Task<IActionResult> Suggest([FromQuery] string? q, [FromQuery] double? lat, [FromQuery] double? lng,
+        [FromServices] AddressSearchService search, CancellationToken cancellationToken) =>
+        Ok(await search.CityAsync(q ?? "", lat, lng, cancellationToken));
+
+    /// <summary>
+    /// The same search anywhere in South Africa, from OpenStreetMap (Photon): streets, numbered
+    /// houses where mapped, suburbs and towns. Slower (seconds); ranked on the same scale as
+    /// <see cref="Suggest"/>.
+    /// </summary>
+    [HttpGet("suggest/national")]
+    public async Task<IActionResult> SuggestNational([FromQuery] string? q, [FromQuery] double? lat, [FromQuery] double? lng,
+        [FromServices] AddressSearchService search, CancellationToken cancellationToken) =>
+        Ok(await search.NationalAsync(q ?? "", lat, lng, cancellationToken));
 
     /// <summary>Address, coordinate or erf → candidate properties (usually one).</summary>
     [HttpPost("resolve")]

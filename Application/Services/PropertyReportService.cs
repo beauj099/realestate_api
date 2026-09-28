@@ -121,47 +121,6 @@ public class PropertyReportService(
         }
     }
 
-    /// <summary>Address type-ahead from the City's parcel records. Cached an hour per query.</summary>
-    public async Task<IReadOnlyList<AddressSuggestionDto>> SuggestAsync(string query, CancellationToken ct)
-    {
-        var q = query.Trim();
-        if (q.Length < 3) return [];
-        var key = $"suggest:{q.ToUpperInvariant()}";
-        if (cache.TryGetValue(key, out IReadOnlyList<AddressSuggestionDto>? hit) && hit is not null) return hit;
-
-        // Both cities at once; a city that is down just contributes nothing.
-        async Task<List<PropertyData.CapeTown.Clients.AddressSuggestion>> Safe(
-            Func<Task<List<PropertyData.CapeTown.Clients.AddressSuggestion>>> call)
-        {
-            try { return await call(); }
-            catch (HttpRequestException ex) { log.LogWarning(ex, "Suggestion source did not answer"); return []; }
-        }
-        var ctTask = Safe(() => capeTown.SuggestAsync(q, 8, ct));
-        var jhbTask = Safe(() => johannesburg.SuggestAsync(q, 8, ct));
-        await Task.WhenAll(ctTask, jhbTask);
-
-        AddressSuggestionDto Dto(PropertyData.CapeTown.Clients.AddressSuggestion s, string municipality, string city, string province)
-        {
-            var street = TitleCase(string.Join(' ', new[] { s.StreetName, s.StreetType }.Where(p => !string.IsNullOrWhiteSpace(p))));
-            var number = s.StreetNumber is null ? null : $"{s.StreetNumber}{s.StreetNumberSuffix}";
-            var suburb = TitleCase(s.Suburb);
-            return new AddressSuggestionDto(
-                Label: $"{(number is null ? "" : number + " ")}{street}, {suburb}",
-                StreetNumber: number, StreetName: street, Suburb: suburb,
-                City: city, Province: province, Country: "South Africa",
-                Erf: s.Erf, Sg26: s.Sg26, Lat: s.Location?.Lat, Lng: s.Location?.Lng,
-                Municipality: municipality);
-        }
-
-        IReadOnlyList<AddressSuggestionDto> result = ctTask.Result.Select(s => Dto(s, CapeTown, "Cape Town", "Western Cape"))
-            .Concat(jhbTask.Result.Select(s => Dto(s, Johannesburg, "Johannesburg", "Gauteng")))
-            .Take(10)
-            .ToList();
-
-        cache.Set(key, result, TimeSpan.FromHours(1));
-        return result;
-    }
-
     private static string TitleCase(string s) =>
         System.Globalization.CultureInfo.InvariantCulture.TextInfo.ToTitleCase(s.ToLowerInvariant());
 

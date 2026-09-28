@@ -226,6 +226,24 @@ namespace PropertyData.Johannesburg
             return list;
         }
 
+        /// <summary>Township names starting with the text ("olived" → OLIVEDALE).</summary>
+        public async Task<List<string>> SuggestSuburbsAsync(string text, int limit = 3, CancellationToken ct = default)
+        {
+            var name = AddressNormalizer.SuburbPrefix(text);
+            if (name is null) return [];
+            var feats = await arc.QueryAsync(StandsLayer, new Dictionary<string, string>
+            {
+                ["where"] = $"TOWN_NAME_DESC LIKE '{AddressNormalizer.SqlLiteral(name)}%'",
+                ["outFields"] = "TOWN_NAME_DESC",
+                ["returnDistinctValues"] = "true",
+                ["returnGeometry"] = "false",
+                ["orderByFields"] = "TOWN_NAME_DESC",
+                ["resultRecordCount"] = limit.ToString(CultureInfo.InvariantCulture),
+            }, ct, singlePage: true);
+            return feats.Select(f => ArcGisClient.Str(f.GetProperty("attributes"), "TOWN_NAME_DESC"))
+                .OfType<string>().ToList();
+        }
+
         /// <summary>Type-ahead over stand addresses ("10 thirteenth", "10 thirteenth st park").</summary>
         public async Task<List<AddressSuggestion>> SuggestAsync(string text, int limit = 8, CancellationToken ct = default)
         {

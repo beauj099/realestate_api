@@ -83,6 +83,13 @@ public static class DependencyInjection
             c.DefaultRequestHeaders.UserAgent.ParseAdd(configuration.GetValue<string>("PropertyData:UserAgent")
                 ?? "RealWorth/1.0 (+https://api.realworth.co.za)");
         });
+        // Address search outside the City records: Photon (OpenStreetMap), built for type-ahead.
+        services.AddHttpClient<global::PropertyData.Geocoding.PhotonClient>(c =>
+        {
+            c.Timeout = TimeSpan.FromSeconds(10);
+            c.DefaultRequestHeaders.UserAgent.ParseAdd(configuration.GetValue<string>("PropertyData:UserAgent")
+                ?? "RealWorth/1.0 (+https://api.realworth.co.za)");
+        });
         services.Configure<ImageryOptions>(configuration.GetSection(ImageryOptions.SectionName));
         services.AddSingleton<ImageryLinkBuilder>();
         // Monthly check that every municipal source still answers as expected (emails on failure).
@@ -135,6 +142,7 @@ public static class DependencyInjection
         services.AddScoped<AgentComparableService>();
         services.AddScoped<DataSourceHealthService>();
         services.AddScoped<ForSaleListingsService>();
+        services.AddScoped<AddressSearchService>();
         services.AddScoped<AreaDetailsService>();
         services.AddScoped<PropertyReportService>();
 
