@@ -9,7 +9,22 @@ public record ClimateDto(double MeanC, double AvgMaxC, double AvgMinC, double An
     double HottestAvgMaxC, string ColdestMonth, double ColdestAvgMinC, string Years, string Source)
 {
     public double? HumidityPct { get; init; }
+
+    /// <summary>Month by month (January first): average high and low, and rain in an average year.</summary>
+    public IReadOnlyList<ClimateMonthDto>? Months { get; init; }
+
+    /// <summary>Days a year with at least 1 mm of rain, and with a high over 30 °C.</summary>
+    public int? RainDaysPerYear { get; init; }
+    public int? HotDaysPerYear { get; init; }
+
+    /// <summary>Sunshine on flat ground, kWh/m² a day (what a solar panel has to work with).</summary>
+    public double? SolarKwhM2Day { get; init; }
+
+    /// <summary>Average wind at 2 m, m/s.</summary>
+    public double? WindMs { get; init; }
 }
+
+public record ClimateMonthDto(int Month, double AvgMaxC, double AvgMinC, double RainMm);
 
 public record PopulationDto(string? MainPlace, string? SubPlace, int? Population, int? Households, double? AreaKm2,
     double? PeoplePerKm2, string Municipality, int? MunicipalityPopulation, string Year, string Source)
@@ -97,15 +112,22 @@ public class AreaDetailsService(IHttpClientFactory httpFactory, IMemoryCache cac
     {
         var endYear = DateTime.UtcNow.Year - 1;
         var startYear = endYear - 9;
-        var url = $"{NasaPower}?parameters=T2M,T2M_MAX,T2M_MIN,PRECTOTCORR,RH2M&community=RE" +
+        var url = $"{NasaPower}?parameters=T2M,T2M_MAX,T2M_MIN,PRECTOTCORR,RH2M,ALLSKY_SFC_SW_DWN,WS2M&community=RE" +
                   $"&longitude={lng.ToString(CultureInfo.InvariantCulture)}&latitude={lat.ToString(CultureInfo.InvariantCulture)}" +
                   $"&start={startYear}0101&end={endYear}1231&format=JSON";
         using var doc = JsonDocument.Parse(await Http().GetStringAsync(url, ct));
         var p = doc.RootElement.GetProperty("properties").GetProperty("parameter");
         var humidity = Series(p, "RH2M");
+        var sun = Series(p, "ALLSKY_SFC_SW_DWN");
+        var wind = Series(p, "WS2M");
         return SummariseClimate(Series(p, "T2M"), Series(p, "T2M_MAX"), Series(p, "T2M_MIN"), Series(p, "PRECTOTCORR"),
             $"{startYear}–{endYear}") is { } climate
-            ? climate with { HumidityPct = humidity.Count > 0 ? Math.Round(humidity.Values.Average()) : null }
+            ? climate with
+            {
+                HumidityPct = humidity.Count > 0 ? Math.Round(humidity.Values.Average()) : null,
+                SolarKwhM2Day = sun.Count > 300 ? Math.Round(sun.Values.Average(), 1) : null,
+                WindMs = wind.Count > 300 ? Math.Round(wind.Values.Average(), 1) : null,
+            }
             : null;
     }
 
@@ -124,11 +146,21 @@ public class AreaDetailsService(IHttpClientFactory httpFactory, IMemoryCache cac
         var hottest = byMonthMax.MaxBy(m => m.Value);
         var coldest = byMonthMin.MinBy(m => m.Value);
         string Month(int m) => CultureInfo.InvariantCulture.DateTimeFormat.GetMonthName(m);
+        var rainByMonth = rain.GroupBy(d => d.Key.Month).ToDictionary(g => g.Key, g => g.Sum(d => d.Value) / yearsCount);
         return new ClimateDto(
             Math.Round(mean.Values.Average(), 1), Math.Round(max.Values.Average(), 1), Math.Round(min.Values.Average(), 1),
             Math.Round(rain.Values.Sum() / yearsCount), Month(hottest.Key), Math.Round(hottest.Value, 1),
             Month(coldest.Key), Math.Round(coldest.Value, 1), years,
-            "NASA POWER daily climate data (MERRA-2)");
+            "NASA POWER daily climate data (MERRA-2)")
+        {
+            Months = Enumerable.Range(1, 12)
+                .Where(m => byMonthMax.ContainsKey(m) && byMonthMin.ContainsKey(m))
+                .Select(m => new ClimateMonthDto(m, Math.Round(byMonthMax[m], 1), Math.Round(byMonthMin[m], 1),
+                    Math.Round(rainByMonth.GetValueOrDefault(m))))
+                .ToList(),
+            RainDaysPerYear = (int)Math.Round(rain.Count(d => d.Value >= 1) / (double)yearsCount),
+            HotDaysPerYear = (int)Math.Round(max.Count(d => d.Value > 30) / (double)yearsCount),
+        };
     }
 
     // ---- population: Census 2011 sub place and main place ------------------------------------
