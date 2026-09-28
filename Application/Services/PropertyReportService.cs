@@ -15,7 +15,8 @@ namespace RealEstateApi.Application.Services;
 /// imagery and a second look at the same property never go back to the City.
 ///
 /// Coverage: Cape Town (everything), Johannesburg (values and current sales, no building sizes),
-/// and the national cadastre anywhere else (erf identity and size only, from a GPS pin).
+/// Tshwane and Mossel Bay (values from their rolls, from a GPS pin; no sales), and the national cadastre anywhere
+/// else (erf identity and size only, from a GPS pin).
 /// </summary>
 public class PropertyReportService(
     IEnumerable<IPropertyDataProvider> providers,
@@ -23,6 +24,7 @@ public class PropertyReportService(
     PropertyData.Johannesburg.JohannesburgPropertyProvider johannesburg,
     IMemoryCache cache,
     ImageryLinkBuilder imagery,
+    AgentComparableService agentComparables,
     ILogger<PropertyReportService> log)
 {
     private static readonly TimeSpan RecordTtl = TimeSpan.FromHours(12);
@@ -30,6 +32,20 @@ public class PropertyReportService(
     public const string CapeTown = "coct";
     public const string Johannesburg = PropertyData.Johannesburg.JohannesburgPropertyProvider.Municipality;
     public const string National = PropertyData.National.NationalCadastreProvider.Municipality;
+    public const string Tshwane = PropertyData.Tshwane.TshwanePropertyProvider.Municipality;
+    public const string MosselBay = PropertyData.MosselBay.MosselBayPropertyProvider.Municipality;
+
+    /// <summary>
+    /// Municipalities with a roll of their own on top of the national cadastre, by the cadastre's
+    /// parcel-key prefix (the demarcation code).
+    /// </summary>
+    private static readonly (string Prefix, string Municipality)[] RollsByParcelKey =
+    [
+        (PropertyData.Tshwane.TshwanePropertyProvider.ParcelKeyPrefix, Tshwane),
+        (PropertyData.MosselBay.MosselBayPropertyProvider.ParcelKeyPrefix, MosselBay),
+        // Rolls read from published PDF books (Drakenstein, …).
+        .. PropertyData.RollBooks.RollBookCatalogue.All.Select(m => (m.ParcelKeyPrefix, m.Municipality)),
+    ];
 
     /// <summary>
     /// A GPS pin goes to each city in turn, then to the national cadastre. An address or erf has
@@ -47,6 +63,14 @@ public class PropertyReportService(
                 refs = await TryResolve(ProviderFor(municipality), query, ct);
                 if (refs.Count > 0) break;
             }
+
+            // A parcel in Tshwane ("GTSH…") or Mossel Bay ("W043…") also has a value on its roll.
+            refs = refs.Select(r =>
+            {
+                if (r.Municipality != National || r.Sg26 is null) return r;
+                var owner = RollsByParcelKey.FirstOrDefault(o => r.Sg26.StartsWith(o.Prefix, StringComparison.OrdinalIgnoreCase));
+                return owner.Municipality is null ? r : r with { Municipality = owner.Municipality };
+            }).ToList();
         }
         else
         {
@@ -142,12 +166,23 @@ public class PropertyReportService(
         System.Globalization.CultureInfo.InvariantCulture.TextInfo.ToTitleCase(s.ToLowerInvariant());
 
     public async Task<PropertyReportDto> GetReportAsync(string municipality, string erf, string? suburb,
-        string? sg26, bool includeComparables, CancellationToken ct)
+        string? sg26, bool includeComparables, int? userId, CancellationToken ct)
     {
         var record = await GetRecordAsync(municipality, erf, suburb, sg26, includeComparables
             ? new RecordOptions()
             : new RecordOptions(IncludeComparables: false), includeComparables ? "full" : "nocomps", ct);
-        return Map(record);
+        var report = Map(record);
+        if (!includeComparables) return report;
+
+        // Sales the City recorded for the area, to check agent-reported ones against. Transfers
+        // for R0 and implausible prices are not sales and would only raise false disputes.
+        var municipalSales = record.Comparables?.All
+            .Where(c => c.Exclusion is not (ComparableExclusion.ZeroPrice or ComparableExclusion.ImplausiblePrice))
+            .Select(c => new MunicipalSale(c.Address, c.Erf, c.SaleDate, c.SalePriceZar))
+            .ToList() ?? [];
+        var agentSales = await agentComparables.ForReportAsync(userId, record.Ref.Municipality, record.Ref.Suburb,
+            municipalSales, record.DataSource, record.DwellingExtentM2, record.BestExtentM2, ct);
+        return report with { AgentComparables = agentSales };
     }
 
     public async Task<string> GetSitePlanSvgAsync(string municipality, string erf, string? suburb, string? sg26,
@@ -251,18 +286,18 @@ public class PropertyReportService(
             .OrderByDescending(c => c.Included)
             .ThenByDescending(c => c.SaleDate)
             .Take(40)
-            .Select(c => new ComparableDto(
-                c.Address, c.Erf, c.ErfExtentM2, c.DwellingExtentM2,
-                c.SaleDate.ToString("yyyy-MM-dd"), c.SalePriceZar, c.IndexedPriceZar,
-                c.PricePerDwellingM2 is null ? null : Math.Round(c.PricePerDwellingM2.Value),
-                c.Included, c.Included ? null : Describe(c.Exclusion)))
+            .Select(ToDto)
             .ToList() ?? [],
 
         ComparableSummary: r.Comparables is null ? null : new ComparableSummaryDto(
             r.Comparables.All.Count, r.Comparables.Included.Count,
             r.Comparables.ExcludedZeroPrice, r.Comparables.ExcludedImplausible,
             r.Comparables.ExcludedTooOld, r.Comparables.ExcludedDissimilar,
-            r.Comparables.MedianPricePerDwellingM2, r.Comparables.MedianPricePerErfM2),
+            r.Comparables.MedianPricePerDwellingM2, r.Comparables.MedianPricePerErfM2,
+            RadiusM: r.Comparables.RadiusM,
+            ExcludedMultiProperty: r.Comparables.All.Count(c => c.Exclusion == ComparableExclusion.MultiPropertySale),
+            ExcludedNoBuilding: r.Comparables.All.Count(c => c.Exclusion == ComparableExclusion.NoBuilding),
+            ExcludedTooFar: r.Comparables.All.Count(c => c.Exclusion == ComparableExclusion.TooFar)),
 
         IndicativeValue: r.Comparables?.ImpliedValueMidZar is null ? null : new MoneyRangeDto(
             r.Comparables.ImpliedValueLowZar, r.Comparables.ImpliedValueMidZar, r.Comparables.ImpliedValueHighZar),
@@ -275,23 +310,119 @@ public class PropertyReportService(
         ComparablesMethod: MethodFor(r),
         CoverageNote: CoverageFor(r),
         Provenance: r.Provenance.Select(p => new ProvenanceDto(p.Field, p.Source, p.FetchedAt.ToString("O"))).ToList(),
-        GeneratedAtUtc: DateTimeOffset.UtcNow.ToString("O"));
+        GeneratedAtUtc: DateTimeOffset.UtcNow.ToString("O"),
+        LastSale: r.LastSale is null ? null : new SaleRecordDto(r.LastSale.Date.ToString("yyyy-MM-dd"), r.LastSale.PriceZar),
+        StreetSales: StreetSales(r),
+        AreaMarket: AreaMarket(r));
+
+    private static ComparableDto ToDto(Comparable c) => new(
+        c.Address, c.Erf, c.ErfExtentM2, c.DwellingExtentM2,
+        c.SaleDate.ToString("yyyy-MM-dd"), c.SalePriceZar, c.IndexedPriceZar,
+        c.PricePerDwellingM2 is null ? null : Math.Round(c.PricePerDwellingM2.Value),
+        c.Included, c.Included ? null : Describe(c.Exclusion),
+        c.DistanceM, c.Location?.Lat, c.Location?.Lng);
+
+    /// <summary>Sales that are a market price for one property (not R0, not a bulk deal).</summary>
+    private static bool IsMarketSale(Comparable c) => c.Exclusion is not
+        (ComparableExclusion.ZeroPrice or ComparableExclusion.ImplausiblePrice
+         or ComparableExclusion.MultiPropertySale or ComparableExclusion.IsSubject);
+
+    /// <summary>"10 BOSMAN STREET STRAND" → "BOSMAN STREET" (the number and the suburb removed).</summary>
+    internal static string? StreetOf(string address, string suburb)
+    {
+        var a = System.Text.RegularExpressions.Regex.Replace(address.ToUpperInvariant().Trim(), @"^\d+[A-Z]?\s+", "");
+        var s = suburb.Trim().ToUpperInvariant();
+        if (s.Length > 0 && a.EndsWith(" " + s, StringComparison.Ordinal)) a = a[..^(s.Length + 1)];
+        return a.Length == 0 || a.StartsWith("ERF ", StringComparison.Ordinal) ? null : a;
+    }
+
+    /// <summary>The ten latest market sales in the subject's street.</summary>
+    private static IReadOnlyList<ComparableDto>? StreetSales(PropertyRecord r)
+    {
+        if (r.Comparables is null || StreetOf(r.FormattedAddress, r.Ref.Suburb) is not { } street) return null;
+        return r.Comparables.All
+            .Where(c => c.SalePriceZar > 0 && c.Exclusion is not ComparableExclusion.MultiPropertySale)
+            .Where(c => System.Text.RegularExpressions.Regex.Replace(c.Address.ToUpperInvariant(), @"^\d+[A-Z]?\s+", "")
+                .StartsWith(street + " ", StringComparison.Ordinal)
+                || System.Text.RegularExpressions.Regex.Replace(c.Address.ToUpperInvariant(), @"^\d+[A-Z]?\s+", "") == street)
+            .OrderByDescending(c => c.SaleDate)
+            .Take(10)
+            .Select(ToDto)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Every market sale within the comparables' radius (or the whole area list when there was
+    /// none), by year and by price band.
+    /// </summary>
+    private static AreaMarketDto? AreaMarket(PropertyRecord r)
+    {
+        if (r.Comparables is null) return null;
+        var radius = r.Comparables.RadiusM;
+        var sales = r.Comparables.All
+            .Where(IsMarketSale)
+            .Where(c => radius is null || c.DistanceM <= radius)
+            .ToList();
+        if (sales.Count == 0) return new AreaMarketDto(radius, 0, null, [], []);
+
+        var prices = sales.Select(c => c.SalePriceZar).Order().ToList();
+        decimal At(double q) => prices[Math.Clamp((int)Math.Round(q * (prices.Count - 1)), 0, prices.Count - 1)];
+
+        var byYear = sales.GroupBy(c => c.SaleDate.Year).OrderBy(g => g.Key)
+            .Select(g => new YearlySalesDto(g.Key, g.Count(), Median(g.Select(c => c.SalePriceZar))))
+            .ToList();
+
+        // Ten equal bands between the 5th and 95th percentile, so one mansion does not flatten
+        // the chart; the outer bands take what lies beyond.
+        var lo = At(0.05);
+        var hi = At(0.95);
+        var bands = new List<PriceBandDto>();
+        if (hi > lo)
+        {
+            var width = (hi - lo) / 10m;
+            for (var i = 0; i < 10; i++)
+            {
+                var from = lo + width * i;
+                var to = i == 9 ? hi : from + width;
+                var n = sales.Count(c => (i == 0 || c.SalePriceZar >= from) && (i == 9 || c.SalePriceZar < to));
+                bands.Add(new PriceBandDto(Math.Round(from / 1000m) * 1000m, Math.Round(to / 1000m) * 1000m, n,
+                    Math.Round(100.0 * n / sales.Count, 1)));
+            }
+        }
+        return new AreaMarketDto(radius, sales.Count, Median(prices), byYear, bands);
+    }
+
+    private static decimal Median(IEnumerable<decimal> values)
+    {
+        var v = values.Order().ToList();
+        return v.Count % 2 == 1 ? v[v.Count / 2] : (v[v.Count / 2 - 1] + v[v.Count / 2]) / 2m;
+    }
 
     /// <summary>How the comparables were chosen, in a sentence the report prints as is.</summary>
-    private static string? MethodFor(PropertyRecord r) => r.Comparables is null ? null : r.Ref.Municipality switch
+    private static string? MethodFor(PropertyRecord r)
     {
-        Johannesburg =>
-            $"The last registered sale of every stand of the same category within {PropertyData.Johannesburg.JohannesburgPropertyProvider.ComparableRadiusM:0} m, " +
-            "over the last four years (City of Johannesburg). Transfers for R0 and implausibly low prices were removed. " +
-            "Johannesburg does not publish building sizes, so sales were compared by erf size and the range is the " +
-            "median price per square metre of erf applied to this property.",
-        _ =>
-            "Sales recorded by the City of Cape Town in the property's area were filtered: transfers for R0 and " +
-            "implausibly low prices (family transfers, part-transfers, correction deeds) were removed, as were sales " +
-            "older than four years and homes whose building size differs by more than 30%. Older sales were indexed " +
-            "to today with the suburb's change between the 2022 and 2025 rolls; the median price per square metre of " +
-            "building applied to this property gives the midpoint, and the quartiles the range.",
-    };
+        if (r.Comparables is null) return null;
+        var near = r.Comparables.RadiusM is { } radius
+            ? $"The nearest were used: sales within {radius} m of the property (the search widens to 1 km only when " +
+              "fewer than six similar sales are that close). "
+            : "Too few similar sales lie within 1 km, so the whole area was used. ";
+        const string cleaned = "Transfers for R0, implausibly low prices (family transfers, part-transfers, correction " +
+                               "deeds) and several properties sold together for one price were removed";
+        return r.Ref.Municipality switch
+        {
+            Johannesburg =>
+                "The last registered sale of every stand of the same category over the last four years (City of " +
+                $"Johannesburg). {cleaned}. {near}Johannesburg does not publish building sizes, so sales were compared " +
+                "by erf size: each price is carried over to this erf's size (a stand twice the size sells for about " +
+                "1.5 times as much, not twice), and the median and quartiles of those give the range.",
+            _ =>
+                $"Sales recorded by the City of Cape Town around the property were filtered. {cleaned}, as were sales " +
+                "older than four years, sales with no building on record and homes whose building size differs by more " +
+                $"than 30% (50% where that leaves too few). {near}Older sales were indexed to today with the suburb's change between the 2022 and 2025 " +
+                "rolls, and each was carried over to this home's size (a home twice the size sells for about 1.5 times " +
+                "as much, not twice); the median of those gives the midpoint, and the quartiles the range.",
+        };
+    }
 
     /// <summary>What this report cannot contain for the property's area, for a note the app shows.</summary>
     private static string? CoverageFor(PropertyRecord r) => r.Ref.Municipality switch
@@ -299,9 +430,22 @@ public class PropertyReportService(
         Johannesburg =>
             "Johannesburg values are from the GV2023 roll (valued as at 1 July 2022). Building sizes are not " +
             "published, so floor area is not filled in and sales are compared by erf size.",
+        Tshwane =>
+            "Tshwane values are from the GV2025 roll (valued as at 1 July 2024, in effect from 1 July 2025). " +
+            "The roll has no sales or building sizes, so there are no municipal comparable sales; sales " +
+            "reported by agents are the comparables here. Erf details are from the national cadastre.",
+        MosselBay =>
+            "Mossel Bay values are from the 2022–2026 roll (valued as at 1 July 2021, in effect from 1 July 2022). " +
+            "The roll has no sales or building sizes, so there are no municipal comparable sales; sales reported " +
+            "by agents are the comparables here. Erf boundaries are from the national cadastre.",
         National =>
             "Only the national cadastre covers this property: its erf number, size and boundary, from records of " +
             "about 2017. There is no municipal value or sales data for this area yet.",
+        var m when PropertyData.RollBooks.RollBookCatalogue.ForMunicipality(m) is { } book =>
+            $"{book.Name} values are from its {book.RollVersion} roll ({book.PeriodLabel}; valued as at " +
+            $"{book.DateOfValuation:d MMMM yyyy}), read from the roll books the municipality publishes. The roll has no " +
+            "sales or building sizes, so there are no municipal comparable sales; sales reported by agents are the " +
+            "comparables here. Erf boundaries are from the national cadastre.",
         _ => null,
     };
 
@@ -312,6 +456,9 @@ public class PropertyReportService(
         ComparableExclusion.DissimilarSize => "Size too different from this property",
         ComparableExclusion.TooOld => "Sold too long ago",
         ComparableExclusion.IsSubject => "This property",
+        ComparableExclusion.MultiPropertySale => "Several properties sold together for one price",
+        ComparableExclusion.NoBuilding => "No building on record",
+        ComparableExclusion.TooFar => "Further away than the nearer sales used",
         _ => e.ToString(),
     };
 }

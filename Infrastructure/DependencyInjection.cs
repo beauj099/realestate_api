@@ -48,9 +48,46 @@ public static class DependencyInjection
         services.AddScoped<global::PropertyData.Johannesburg.JohannesburgPropertyProvider>();
         services.AddScoped<global::PropertyData.Core.IPropertyDataProvider>(sp =>
             sp.GetRequiredService<global::PropertyData.Johannesburg.JohannesburgPropertyProvider>());
-        services.AddScoped<global::PropertyData.Core.IPropertyDataProvider, global::PropertyData.National.NationalCadastreProvider>();
+        services.AddScoped<global::PropertyData.National.NationalCadastreProvider>();
+        services.AddScoped<global::PropertyData.Core.IPropertyDataProvider>(sp =>
+            sp.GetRequiredService<global::PropertyData.National.NationalCadastreProvider>());
+        // Tshwane: the national cadastre for the parcel, the City's roll for its value.
+        services.AddHttpClient<global::PropertyData.Tshwane.TshwaneRollClient>(c =>
+        {
+            c.Timeout = TimeSpan.FromSeconds(30);
+            c.DefaultRequestHeaders.UserAgent.ParseAdd(configuration.GetValue<string>("PropertyData:UserAgent")
+                ?? "RealWorth/1.0 (+https://api.realworth.co.za)");
+        });
+        services.AddScoped<global::PropertyData.Core.IPropertyDataProvider, global::PropertyData.Tshwane.TshwanePropertyProvider>();
+        // Mossel Bay: the national cadastre for the parcel, the municipality's NDK online roll for its value.
+        services.AddHttpClient<global::PropertyData.MosselBay.NdkRollClient>(c =>
+        {
+            c.Timeout = TimeSpan.FromSeconds(30);
+            c.DefaultRequestHeaders.UserAgent.ParseAdd(configuration.GetValue<string>("PropertyData:UserAgent")
+                ?? "RealWorth/1.0 (+https://api.realworth.co.za)");
+        });
+        services.AddScoped<global::PropertyData.Core.IPropertyDataProvider, global::PropertyData.MosselBay.MosselBayPropertyProvider>();
+        // Municipalities with only PDF roll books (Drakenstein…): imported by tools/ImportRollBooks.
+        services.AddScoped<global::PropertyData.Core.IPropertyDataProvider, global::PropertyData.RollBooks.RollBookPropertyProvider>();
+        // Area details: climate, census and crime sources.
+        services.AddHttpClient(AreaDetailsService.HttpClientName, c =>
+        {
+            c.Timeout = TimeSpan.FromSeconds(40);
+            c.DefaultRequestHeaders.UserAgent.ParseAdd(configuration.GetValue<string>("PropertyData:UserAgent")
+                ?? "RealWorth/1.0 (+https://api.realworth.co.za)");
+        });
+        // Property24: homes for sale near a property (credited and linked to Property24).
+        services.AddHttpClient<global::PropertyData.Listings.Property24Client>(c =>
+        {
+            c.Timeout = TimeSpan.FromSeconds(40);
+            c.DefaultRequestHeaders.UserAgent.ParseAdd(configuration.GetValue<string>("PropertyData:UserAgent")
+                ?? "RealWorth/1.0 (+https://api.realworth.co.za)");
+        });
         services.Configure<ImageryOptions>(configuration.GetSection(ImageryOptions.SectionName));
         services.AddSingleton<ImageryLinkBuilder>();
+        // Monthly check that every municipal source still answers as expected (emails on failure).
+        services.Configure<DataSourceCheckOptions>(configuration.GetSection(DataSourceCheckOptions.SectionName));
+        services.AddHostedService<MonthlyDataSourceCheck>();
         services.AddHttpClient("imagery", c => c.Timeout = TimeSpan.FromSeconds(20));
 
         return services;
@@ -75,6 +112,9 @@ public static class DependencyInjection
         services.AddScoped<UserRepository>();
         services.AddScoped<RefreshTokenRepository>();
         services.AddScoped<PasswordResetCodeRepository>();
+        services.AddScoped<AgentComparableRepository>();
+        services.AddScoped<RollBookRepository>();
+        services.AddScoped<AgentProfileRepository>();
 
         return services;
     }
@@ -92,6 +132,10 @@ public static class DependencyInjection
         services.AddScoped<ListingOutdoorFeatureService>();
         services.AddScoped<AuthService>();
         services.AddScoped<AgentProfileService>();
+        services.AddScoped<AgentComparableService>();
+        services.AddScoped<DataSourceHealthService>();
+        services.AddScoped<ForSaleListingsService>();
+        services.AddScoped<AreaDetailsService>();
         services.AddScoped<PropertyReportService>();
 
         return services;

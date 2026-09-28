@@ -30,7 +30,23 @@ public record MoneyRangeDto(decimal? Low, decimal? Mid, decimal? High);
 public record ComparableDto(
     string Address, string? Erf, double ErfExtentM2, double DwellingExtentM2,
     string SaleDate, decimal SalePriceZar, decimal? IndexedPriceZar,
-    decimal? PricePerDwellingM2, bool Included, string? ExcludedBecause);
+    decimal? PricePerDwellingM2, bool Included, string? ExcludedBecause,
+    double? DistanceM = null, double? Lat = null, double? Lng = null);
+
+/// <summary>A registered sale of the subject property itself.</summary>
+public record SaleRecordDto(string SaleDate, decimal PriceZar);
+
+public record YearlySalesDto(int Year, int Sales, decimal MedianPriceZar);
+
+/// <summary>A price band and the share of the area's sales in it, for the distribution chart.</summary>
+public record PriceBandDto(decimal FromZar, decimal ToZar, int Sales, double Percent);
+
+/// <summary>
+/// The market around the property: every plausible sale in the area the comparables came from
+/// (not only similar homes), by year and by price band.
+/// </summary>
+public record AreaMarketDto(int? RadiusM, int Sales, decimal? MedianPriceZar,
+    IReadOnlyList<YearlySalesDto> ByYear, IReadOnlyList<PriceBandDto> PriceBands);
 
 /// <summary>
 /// A picture of the property and the licence rule that goes with it. Satellite may be printed
@@ -47,7 +63,8 @@ public record SuburbDto(string Name, int ResidentialCount, double MedianLandM2, 
     decimal Gv2022, decimal Gv2025, double GrowthPercent, double AnnualGrowthPercent);
 
 public record ComparableSummaryDto(int Raw, int Included, int ExcludedZeroPrice, int ExcludedImplausible,
-    int ExcludedTooOld, int ExcludedDissimilar, decimal? MedianPricePerDwellingM2, decimal? MedianPricePerErfM2);
+    int ExcludedTooOld, int ExcludedDissimilar, decimal? MedianPricePerDwellingM2, decimal? MedianPricePerErfM2,
+    int? RadiusM = null, int ExcludedMultiProperty = 0, int ExcludedNoBuilding = 0, int ExcludedTooFar = 0);
 
 public record ProvenanceDto(string Field, string Source, string FetchedAtUtc);
 
@@ -91,4 +108,10 @@ public record PropertyReportDto(
     string? ComparablesMethod,
     string? CoverageNote,
     IReadOnlyList<ProvenanceDto> Provenance,
-    string GeneratedAtUtc);
+    string GeneratedAtUtc,
+    // Sales agents reported for the suburb: read per request (never cached with the record).
+    AgentComparablesSummaryDto? AgentComparables = null,
+    SaleRecordDto? LastSale = null,
+    // The latest sales in the subject's own street, newest first.
+    IReadOnlyList<ComparableDto>? StreetSales = null,
+    AreaMarketDto? AreaMarket = null);

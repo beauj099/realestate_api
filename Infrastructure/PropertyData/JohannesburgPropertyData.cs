@@ -56,8 +56,11 @@ namespace PropertyData.Johannesburg
             "SG_ID,STAND_NO,AREA_SQMT,TOWN_NAME_DESC,CAT_DESC,STREET_NO,STREET_NAME,STREET_TYPE_NAME," +
             "PURCHASE_PRICE,PURCHASE_DATE";
 
-        /// <summary>Comparables come from stands within this distance of the subject.</summary>
-        public const double ComparableRadiusM = 800;
+        /// <summary>
+        /// Comparables are searched within this distance of the subject; the analyzer then keeps
+        /// the nearest (500 m, or all of it when 500 m leaves too few).
+        /// </summary>
+        public const double ComparableRadiusM = 1000;
 
         public string Name => "City of Johannesburg (open GIS: stands, GV2023 values, last registered sales)";
         public bool Handles(string municipality) => municipality is "coj" or "joburg" or "johannesburg";
@@ -140,6 +143,9 @@ namespace PropertyData.Johannesburg
                 LegalStatus = Title(ArcGisClient.Str(at, "STATUS_DESC")),
                 Boundary = ring,
                 Buildings = buildings,
+                LastSale = ArcGisClient.EpochDate(at, "PURCHASE_DATE") is { } bought && ArcGisClient.Num(at, "PURCHASE_PRICE") is > 0
+                    ? new SaleRecord(bought, (decimal)ArcGisClient.Num(at, "PURCHASE_PRICE")!.Value)
+                    : null,
                 Valuation = value is > 0 ? new MunicipalValuation(
                     ValueZar: (decimal)value.Value,
                     AsAt: RollDateOfValuation,
@@ -187,7 +193,12 @@ namespace PropertyData.Johannesburg
             form["distance"] = ComparableRadiusM.ToString(CultureInfo.InvariantCulture);
             form["units"] = "esriSRUnit_Meter";
             form["where"] = where;
-            form["returnGeometry"] = "false";
+            // This map server returns no centroids, so the (simplified) outline gives each stand's
+            // centre, and so its distance.
+            form["returnGeometry"] = "true";
+            form["outSR"] = "4326";
+            form["maxAllowableOffset"] = "0.00002";
+            form["geometryPrecision"] = "6";
             var feats = await arc.QueryAsync(StandsLayer, form, ct);
 
             var list = new List<Comparable>();
@@ -197,8 +208,11 @@ namespace PropertyData.Johannesburg
                 var sg = ArcGisClient.Str(at, "SG_ID");
                 var date = ArcGisClient.EpochDate(at, "PURCHASE_DATE");
                 if (date is null || date.Value > today || sg == subjectSg) continue;
+                LatLng? point = ArcGisClient.ReadRing(f) is { } outline ? Geo.Centroid(outline) : null;
                 list.Add(new Comparable
                 {
+                    Location = point,
+                    DistanceM = point is null ? null : Math.Round(Geo.DistanceM(centre, point)),
                     ValuationRef = sg ?? Guid.NewGuid().ToString("N"),
                     Address = Address(at) ?? $"ERF {ArcGisClient.Str(at, "STAND_NO")} {ArcGisClient.Str(at, "TOWN_NAME_DESC")}",
                     RegisteredDescription = $"{ArcGisClient.Str(at, "STAND_NO")} {ArcGisClient.Str(at, "TOWN_NAME_DESC")}",

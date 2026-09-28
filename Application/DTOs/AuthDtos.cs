@@ -34,7 +34,30 @@ public record AgentProfileDto(
     string? AgencyName,
     string? AgencyRegistrationNumber,
     string? LicenceNumber,
-    string Role);
+    string Role)
+{
+    // From dbo.AgentProfiles. LicenceNumber above is the FFC number.
+    public string? AgencySlug { get; init; }
+    public string? PpraNumber { get; init; }
+    public string? JobTitle { get; init; }
+    public string? Bio { get; init; }
+    public IReadOnlyList<string> Qualifications { get; init; } = [];
+    public string? Website { get; init; }
+    public string? PhotoUrl { get; init; }
+    public string? SignatureUrl { get; init; }
+
+    /// <summary>The agent's own office details; a null field means "use the agency's".</summary>
+    public OfficeDto Office { get; init; } = new(null, null, null, null, null, null);
+
+    /// <summary>The agent's own brochure pages; null means "use the agency's".</summary>
+    public IReadOnlyList<string>? BrochurePages { get; init; }
+
+    /// <summary>Report defaults (calculator rates, room weights) as the app stores them.</summary>
+    public System.Text.Json.JsonElement? ReportSettings { get; init; }
+}
+
+/// <summary>An office's details as a report prints them. Any field may be null.</summary>
+public record OfficeDto(string? Name, string? Address, string? Phone, string? Email, string? Website, string? Footer);
 
 public record UpdateAgentProfileRequest(
     string DisplayName,
@@ -42,4 +65,15 @@ public record UpdateAgentProfileRequest(
     string Mobile,
     string? AgencyName,
     string? AgencyRegistrationNumber,
-    string? LicenceNumber);
+    string? LicenceNumber)
+{
+    // Report-pack fields. Null leaves a field as it is (so an older app that does not send them
+    // cannot wipe them); an empty string clears it.
+    public string? AgencySlug { get; init; }
+    public string? PpraNumber { get; init; }
+    public string? JobTitle { get; init; }
+    public string? Bio { get; init; }
+    public IReadOnlyList<string>? Qualifications { get; init; }
+    public string? Website { get; init; }
+    public OfficeDto? Office { get; init; }
+}

@@ -165,7 +165,11 @@ public class AgencyService
 
     private static AgencyDto ToDto(Agency a) => new(
         a.Id, a.Slug, a.Name, a.Monogram, a.PrimaryColor, a.SecondaryColor, a.OnPrimaryColor, a.BannerColor,
-        a.LogoUrl, a.SortOrder, a.IsCustom);
+        a.LogoUrl, a.SortOrder, a.IsCustom)
+    {
+        Office = new OfficeDto(a.OfficeName, a.OfficeAddress, a.OfficePhone, a.OfficeEmail, a.OfficeWebsite, a.OfficeFooter),
+        BrochurePages = AgentProfileService.ReadPages(a.BrochurePagesJson) ?? [],
+    };
 }
 
 /// <summary>A validated logo file on its way to storage.</summary>

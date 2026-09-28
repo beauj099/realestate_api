@@ -16,7 +16,14 @@ public record AgencyDto(
     string? BannerColor,
     string? LogoUrl,
     int SortOrder,
-    bool IsCustom);
+    bool IsCustom)
+{
+    /// <summary>Office defaults for reports; agents override them on their profile.</summary>
+    public OfficeDto Office { get; init; } = new(null, null, null, null, null, null);
+
+    /// <summary>The agency's brochure pages (image URLs), appended to every report pack.</summary>
+    public IReadOnlyList<string> BrochurePages { get; init; } = [];
+}
 
 /// <summary>Admin restyle of an agency. Every field is replaced.</summary>
 public record UpdateAgencyRequest(

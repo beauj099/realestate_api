@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RealEstateApi.Application.DTOs;
@@ -18,12 +19,15 @@ public class PropertyReportController : ControllerBase
     private readonly PropertyReportService _reports;
     private readonly ImageryLinkBuilder _imagery;
     private readonly IHttpClientFactory _httpFactory;
+    private readonly ForSaleListingsService _forSale;
 
-    public PropertyReportController(PropertyReportService reports, ImageryLinkBuilder imagery, IHttpClientFactory httpFactory)
+    public PropertyReportController(PropertyReportService reports, ImageryLinkBuilder imagery, IHttpClientFactory httpFactory,
+        ForSaleListingsService forSale)
     {
         _reports = reports;
         _imagery = imagery;
         _httpFactory = httpFactory;
+        _forSale = forSale;
     }
 
     /// <summary>
@@ -72,7 +76,9 @@ public class PropertyReportController : ControllerBase
     {
         try
         {
-            return Ok(await _reports.GetReportAsync(municipality, erf, suburb, sg26, includeComparables, cancellationToken));
+            return Ok(await _reports.GetReportAsync(municipality, erf, suburb, sg26, includeComparables,
+                int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId) ? userId : null,
+                cancellationToken));
         }
         catch (HttpRequestException)
         {
@@ -94,6 +100,48 @@ public class PropertyReportController : ControllerBase
         catch (HttpRequestException)
         {
             return CityUnavailable();
+        }
+    }
+
+    /// <summary>
+    /// Area details for a point: climate, population and density, household income and crime,
+    /// each from its own free public source and each left out when that source is down.
+    /// </summary>
+    [HttpGet("area")]
+    public async Task<IActionResult> GetArea([FromQuery] double lat, [FromQuery] double lng,
+        [FromServices] AreaDetailsService area, CancellationToken cancellationToken)
+    {
+        if (lat is < -35.5 or > -21.5 || lng is < 16 or > 33.5)
+            return ValidationFailed("lat", "The point must be in South Africa.");
+        return Ok(await area.GetAsync(lat, lng, cancellationToken));
+    }
+
+    /// <summary>
+    /// Homes for sale like this one, from Property24 (credited and linked there): the listings in
+    /// the property's suburb most alike in bedrooms and size. <paramref name="p24Suburb"/> picks
+    /// a different Property24 suburb from the ones offered.
+    /// </summary>
+    [HttpGet("{municipality}/{erf}/for-sale")]
+    public async Task<IActionResult> GetForSale(string municipality, string erf, [FromQuery] string suburb,
+        [FromQuery] string? township, [FromQuery] int? p24Suburb, [FromQuery] int? bedrooms,
+        [FromQuery] double? floorM2, [FromQuery] double? erfM2, [FromQuery] int max = 3,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(suburb)) return ValidationFailed("suburb", "The report's suburb is required.");
+        try
+        {
+            return Ok(await _forSale.FindAsync(municipality, suburb, township, p24Suburb, bedrooms, floorM2, erfM2, max,
+                cancellationToken));
+        }
+        catch (HttpRequestException)
+        {
+            return StatusCode(StatusCodes.Status502BadGateway, new ProblemDetails
+            {
+                Type = "https://httpstatuses.io/502",
+                Title = "Property24 unavailable",
+                Status = StatusCodes.Status502BadGateway,
+                Detail = "Property24 did not respond. Try again in a few minutes.",
+            });
         }
     }
 

@@ -1,4 +1,4 @@
-# Property data (Cape Town)
+# Property data (Cape Town, Johannesburg, Tshwane, Mossel Bay, Drakenstein, national)
 
 Address → erf → property record → valuation report, from public City of Cape Town data. No
 credentials needed. Background, endpoint reference and compliance rules:
@@ -7,6 +7,13 @@ credentials needed. Background, endpoint reference and compliance rules:
 | File | What it is |
 |---|---|
 | `CapeTownPropertyData.cs` | The adapter: models, address normaliser, geodesy, ArcGIS client, valuation-roll scraper, comparable analyzer, SVG site plan, provider, DI (`AddCapeTownPropertyData`) |
+| `JohannesburgPropertyData.cs` | City of Johannesburg (values, zoning, last registered sales) and the national cadastre fallback (erf and boundary from a GPS pin) |
+| `TshwanePropertyData.cs` | City of Tshwane: the national cadastre's parcel plus the City's GV2025 roll (value, category, registered size). Pins only; no sales |
+| `MosselBayPropertyData.cs` | Mossel Bay: the national cadastre's parcel plus the municipality's NDK online roll (street address, value, category, size). Pins only; no sales |
+| `RollBookParser.cs`, `RollBookCatalogue.cs`, `RollBookPropertyData.cs` | Rolls published only as PDF books (PenSoft layout; Drakenstein GV2024), imported by `tools/ImportRollBooks` into `dbo.RollBookEntries` and read for pins in those towns |
+| `Property24Listings.cs`, `Application/Services/ForSaleListingsService.cs` | Homes for sale like the subject from Property24 (robots.txt-allowed pages only, credited and linked); `GET /api/property/{municipality}/{erf}/for-sale` |
+| `Application/Services/AreaDetailsService.cs`, `Data/crime-stats.json` | Area details: NASA POWER climate, Census 2011 + WorldPop population, Census 2011 income, SAPS crime per precinct (`tools/BuildCrimeStats`, quarterly); `GET /api/property/area` |
+| `Application/Services/DataSourceHealthService.cs` | One known property per source; `GET /api/admin/data-sources/health` (Admin) and a monthly run that emails on failure |
 | `PropertyImagery.cs` | Google imagery links and the print rule (satellite printable with attribution, Street View screen-only) |
 | `Application/Services/PropertyReportService.cs` | Caching (12 h in memory: one report = one fetch) and the DTO the app reads |
 | `Controllers/PropertyReportController.cs` | `POST /api/property/resolve`, `GET /api/property/{municipality}/{erf}`, `…/site-plan.svg`, `GET /api/property/imagery/{kind}` — agents only |
@@ -20,6 +27,9 @@ dotnet test tests/PropertyData.Tests --filter "Category=Integration"    # hits t
 Settings (`appsettings.Local.json` or environment variables):
 - `PropertyData:UserAgent` — who the City sees calling. Put a contact they can reach.
 - `Imagery:GoogleMapsApiKey` — optional. Without it the report simply has no imagery.
+- `DataSourceChecks:AlertEmail` — who is emailed when the monthly source check fails (needs
+  `Smtp:Host`); empty means the failure is only logged. `DataSourceChecks:DayOfMonth` (default 3,
+  0 turns it off) runs it at 01:40.
 
 ## Things that will bite you
 
@@ -39,6 +49,43 @@ Settings (`appsettings.Local.json` or environment variables):
 - **The sales list arrives whole** (2 237 rows in one GET) and includes R0 transfers; the
   `ComparableAnalyzer` filters and reports the counts.
 - **The City's terms of use apply**: cache (done), keep the UserAgent honest, don't hammer.
+- **Tshwane's roll search matches erf AND township as substrings.** erf "1" + "WATERKLOOF"
+  returns 5 767 rows across 34 townships. Always send both, then filter exactly
+  (`TshwaneRollClient.Matches`): base township or its "Xnn" extensions, same stand and portion.
+- **Tshwane: the cadastre's whole erf is the roll's remainder** ("00062/ R"); sectional-title units
+  are "00062/ 1 - UNIT 0002", each valued, with the erf's own row at "R 1" — the placeholder for no
+  value, never a price. The roll has no addresses (resolve by pin) and no sales.
+- **Tshwane parcels are recognised by the cadastre key prefix `GTSH`** (Johannesburg's is `GJHB`).
+  The roll is GV2025: valued as at 1 July 2024, in effect 1 July 2025 – 30 June 2029.
+- **Mossel Bay's roll** (ndkonlineroll.co.za, roll 7) is a plain GET: township id from
+  `GetTownships`, then `SearchFT` by erf. Roll 2022–2026, valued 1 July 2021. "R 0.00" is a
+  placeholder. Read columns by header and never the Owner column. Parcels: key prefix `W043`.
+- **The same NDK host's other rolls are stale**: Metsimaholo (roll 6) serves 2019–2024 and
+  Emfuleni (roll 1) 2017–2019, and their erven sit in "EXT nn" townships the cadastre does not
+  name. Not used. Metsimaholo's results include a column in SA ID number format.
+- **Roll books (PDF) put a space between thousands** ("2 793.2484 Ha", "30 575 000") and the header
+  row does not bound the data (digits sit left of "Extent"; "Including :- …" starts 120 pt left of
+  its header). `RollBookParser` anchors each number on its unit and joins only digit groups a
+  normal space apart. Checked on all of Paarl (24 585 rows) against an independent extraction:
+  no differences. Plain text extraction also runs a street number into the extent ("Bainskloof
+  33 … 803 m²" reads as "33 803 m²").
+- **Consolidated erven**: "5*" is valued for the group ("Including :- Paarl 5, Paarl 7, Paarl 9");
+  members show 0 and "See :- Paarl 5*". An erf "valued under" a sectional scheme ("Note :- See SS
+  The Mews") shows 0 too. Neither 0 is a value; the report says what it is instead.
+- **Other small towns**: George, Knysna, Overstrand … also publish PDFs; add them to
+  `RollBookCatalogue` once their footer says PenSoft (see `tools/ImportRollBooks/README.md`).
+- **Ekurhuleni is not scraped**: its portal states it is for property owners viewing their own
+  values. Ask the City for an extract instead.
+
+- **Comparables are nearest first.** The City's area-sales list covers a whole neighbourhood
+  (all of Strand: 2 278 sales), so each sale is placed on the parcel map and kept within 500 m
+  (1 km when fewer than six are that close). Several erven transferred on one day for one price
+  are one bulk deal, not a price. Scaling price per m² straight up overvalues bigger homes;
+  sales are carried to the subject's size with an elasticity of 0.6.
+- **Property24** answers 503 when hit repeatedly; the suburb sitemap (3.6 MB) is kept on disk a
+  week, and a known suburb id needs no sitemap at all.
+- **Load-shedding** is not included: EskomSePush's free tier is non-commercial and there is no
+  free history. It needs their business licence first.
 
 ## Not done yet
 
@@ -46,4 +93,6 @@ Settings (`appsettings.Local.json` or environment variables):
    is lost on restart.
 2. AfriGIS (ownership, transfers, annual trend) — needs their trial key; the owner-data endpoint,
    POPIA audit and retention in the brief come with it.
-3. Other metros — further `IPropertyDataProvider`s.
+3. Other metros — further `IPropertyDataProvider`s (eThekwini, Nelson Mandela Bay…).
+4. Suburb benchmarks for Tshwane (the median roll value of similar erven) — a township query
+   returns thousands of rows (about 9 MB), so it would need its own long cache.

@@ -17,6 +17,7 @@
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.10" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.1" />
     <PackageReference Include="Microsoft.OpenApi" Version="2.7.5" />
+    <PackageReference Include="PdfPig" Version="0.1.16" />
     <PackageReference Include="Scalar.AspNetCore" Version="2.16.5" />
   </ItemGroup>
 
@@ -44,6 +45,11 @@
   <ItemGroup>
     <None Remove="dotnet-tools.json" />
     <Content Remove="dotnet-tools.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- SAPS figures per police precinct, built by tools/BuildCrimeStats. -->
+    <None Update="Infrastructure\PropertyData\Data\crime-stats.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
