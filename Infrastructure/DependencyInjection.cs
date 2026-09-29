@@ -139,6 +139,7 @@ public static class DependencyInjection
         services.AddScoped<ListingOutdoorFeatureService>();
         services.AddScoped<AuthService>();
         services.AddScoped<AgentProfileService>();
+        services.AddScoped<AccountDeletionService>();
         services.AddScoped<AgentComparableService>();
         services.AddScoped<DataSourceHealthService>();
         services.AddScoped<ForSaleListingsService>();

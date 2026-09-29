@@ -114,3 +114,6 @@ public record UpdateAgentProfileRequest(
     public string? Website { get; init; }
     public OfficeDto? Office { get; init; }
 }
+
+/// <summary>Deleting an account asks for the password again.</summary>
+public record DeleteAccountRequest(string? Password);
