@@ -232,10 +232,30 @@ public class PropertyReportService(
             block ? "Map: City of Cape Town open data; places: OpenStreetMap contributors"
                   : "Map: City of Cape Town open data (cadastre, road centrelines)",
             Block: block,
-            Places: block ? await NearbyPlacesAsync(centre, extent, ct) : null));
+            Places: block ? await NearbyPlacesAsync(centre, extent, ct) : null,
+            OtherSales: block ? OtherSales(record, centre, extent) : null));
         cache.Set(key, svg, RecordTtl);
         return svg;
     }
+
+    /// <summary>
+    /// Every other sale on the City's record around the property (not used as a comparable: a
+    /// different size, older, or no building), for the block view. Transfers of several properties
+    /// at one price and implausible prices are left out: their price is not this erf's.
+    /// </summary>
+    private static List<PropertyData.AreaMaps.MapOtherSale> OtherSales(
+        PropertyRecord record, LatLng centre, double extentM) =>
+        (record.Comparables?.All ?? [])
+            .Where(c => !c.Included && c.Location is not null && c.SalePriceZar > 0
+                        && c.Exclusion is not (ComparableExclusion.ZeroPrice
+                            or ComparableExclusion.ImplausiblePrice
+                            or ComparableExclusion.MultiPropertySale
+                            or ComparableExclusion.IsSubject)
+                        && PropertyData.CapeTown.Internal.Geo.DistanceM(centre, c.Location) <= extentM * 1.2)
+            .Select(c => new PropertyData.AreaMaps.MapOtherSale(
+                PropertyData.CapeTown.Clients.CapeTownSpatialClient.ErfKey(c.RegisteredDescription.Split(' ', 2)[0]),
+                c.Location!, c.SalePriceZar, c.SaleDate.Year))
+            .ToList();
 
     /// <summary>Nearby schools, shops, clinics and parks inside the map; none when unavailable.</summary>
     private async Task<IReadOnlyList<PropertyData.AreaMaps.MapPlace>> NearbyPlacesAsync(LatLng centre, double extentM,

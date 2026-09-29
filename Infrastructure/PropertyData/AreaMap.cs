@@ -14,6 +14,9 @@ public sealed record MapRoad(string Name, string? Type, double? WidthM, IReadOnl
 /// <summary>A comparable sale on the map, numbered as in the report's table.</summary>
 public sealed record MapSale(int Number, string? Erf, LatLng Location);
 
+/// <summary>Another recent sale nearby (not one of the comparables): its erf, price and year.</summary>
+public sealed record MapOtherSale(string? Erf, LatLng Location, decimal PriceZar, int Year);
+
 /// <summary>A nearby place (school, shop, clinic…) by its group key, drawn with that group's icon.</summary>
 public sealed record MapPlace(string Group, string Name, LatLng Location);
 
@@ -30,7 +33,8 @@ public sealed record AreaMapInput(
     int HeightPx,
     string Source,
     bool Block = false,
-    IReadOnlyList<MapPlace>? Places = null);
+    IReadOnlyList<MapPlace>? Places = null,
+    IReadOnlyList<MapOtherSale>? OtherSales = null);
 
 /// <summary>
 /// Draws the neighbourhood as an SVG map from municipal open data: every erf with its street
@@ -48,6 +52,8 @@ public static class AreaMapRenderer
     private const string MainRoad = "#F4D67C";
     private const string SaleFill = "#3D74E0";
     private const string SaleStroke = "#1F4FB5";
+    private const string OtherFill = "#B9CDF3";
+    private const string OtherStroke = "#6F93D8";
     private const string SubjectFill = "#E0433A";
     private const string SubjectStroke = "#A8231C";
 
@@ -79,19 +85,24 @@ public static class AreaMapRenderer
             sb.Append(Inv, $"""<path d="{PathOf(pts, false)}" fill="none" stroke="{MainRoad}" stroke-width="{F(Math.Max((road.WidthM ?? 12) * scale, 4))}" stroke-linecap="round" stroke-linejoin="round"/>""");
 
         var sales = m.Sales.Where(s => s.Erf is not null).Select(s => s.Erf!).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var others = (m.OtherSales ?? []).Where(o => o.Erf is not null && !sales.Contains(o.Erf))
+            .GroupBy(o => o.Erf!, StringComparer.OrdinalIgnoreCase).Select(g => g.OrderByDescending(o => o.Year).First()).ToList();
+        var otherErfs = others.Select(o => o.Erf!).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var parcels = m.Parcels.Select(p => (P: p, Pts: p.Ring.Points.Select(Px).ToList())).Where(p => OnMap(p.Pts)).ToList();
         foreach (var (p, pts) in parcels)
         {
             var isSubject = p.Erf is not null && string.Equals(p.Erf, m.SubjectErf, StringComparison.OrdinalIgnoreCase);
             var isSale = !isSubject && p.Erf is not null && sales.Contains(p.Erf);
+            var isOther = !isSubject && !isSale && p.Erf is not null && otherErfs.Contains(p.Erf);
             var (fill, stroke, sw) = isSubject ? (SubjectFill, SubjectStroke, 1.6)
                 : isSale ? (SaleFill, SaleStroke, 1.2)
+                : isOther ? (OtherFill, OtherStroke, 1.0)
                 : (ParcelFill, ParcelStroke, 0.7);
             sb.Append(Inv, $"""<path d="{PathOf(pts, true)}" fill="{fill}" fill-opacity="{(isSubject || isSale ? "0.88" : "1")}" stroke="{stroke}" stroke-width="{F(sw)}" stroke-linejoin="round"/>""");
         }
 
         // Street numbers where the erf is big enough on the page to hold one.
-        var numberSize = m.Block ? 8.5 : 6.5;
+        var numberSize = m.Block ? 10 : 6.5;
         foreach (var (p, pts) in parcels)
         {
             if (p.Number is null) continue;
@@ -107,7 +118,7 @@ public static class AreaMapRenderer
 
         // Road names, once per road, along its longest straight run on the map.
         var named = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var nameSize = m.Block ? 10.5 : 9.0;
+        var nameSize = m.Block ? 13 : 9.0;
         foreach (var group in roads.Where(r => r.Road.Name.Length > 0)
                      .GroupBy(r => r.Road.Name, StringComparer.OrdinalIgnoreCase)
                      .OrderByDescending(g => g.Max(r => IsMain(r.Road) ? 1 : 0)))
@@ -130,12 +141,23 @@ public static class AreaMapRenderer
         if (m.RadiusM is { } radius)
             sb.Append(Inv, $"""<circle cx="{F(w / 2)}" cy="{F(h / 2)}" r="{F(radius * scale)}" fill="{SaleFill}" fill-opacity="0.05" stroke="{SaleStroke}" stroke-width="2" stroke-dasharray="8 5"/>""");
 
+        // Other recent sales: a small price tag on the erf.
+        foreach (var o in others)
+        {
+            var (x, y) = Px(o.Location);
+            if (!Inside((x, y), w, h, 20)) continue;
+            var tag = $"{Money(o.PriceZar)} · {o.Year}";
+            var tw = tag.Length * 6.4 + 10;
+            sb.Append(Inv, $"""<rect x="{F(x - tw / 2)}" y="{F(y - 9)}" width="{F(tw)}" height="18" rx="4" fill="#FFFFFF" fill-opacity="0.95" stroke="{OtherStroke}" stroke-width="1"/>""");
+            sb.Append(Inv, $"""<text x="{F(x)}" y="{F(y + 4)}" font-size="11.5" font-weight="bold" fill="{SaleStroke}" text-anchor="middle">{Esc(tag)}</text>""");
+        }
+
         // Numbered pins on the sales, then the property's pin on top.
         foreach (var s in m.Sales)
         {
             var (x, y) = Px(s.Location);
             if (!Inside((x, y), w, h, 0)) continue;
-            sb.Append(Pin(x, y, SaleStroke, s.Number.ToString(Inv), m.Block ? 1.3 : 1));
+            sb.Append(Pin(x, y, SaleStroke, s.Number.ToString(Inv), m.Block ? 1.5 : 1));
         }
         // Nearby places with their group's icon and name.
         var shownGroups = new List<string>();
@@ -144,13 +166,13 @@ public static class AreaMapRenderer
             var (x, y) = Px(place.Location);
             if (!Inside((x, y), w, h, 16) || !PlaceStyle.TryGetValue(place.Group, out var style)) continue;
             if (!shownGroups.Contains(place.Group)) shownGroups.Add(place.Group);
-            sb.Append(Inv, $"""<circle cx="{F(x)}" cy="{F(y)}" r="11" fill="{style.Colour}" stroke="#FFFFFF" stroke-width="1.8"/>""");
-            sb.Append(Inv, $"""<g transform="translate({F(x - 7)} {F(y - 7)}) scale(0.583)" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="{style.Icon}"/></g>""");
+            sb.Append(Inv, $"""<circle cx="{F(x)}" cy="{F(y)}" r="15" fill="{style.Colour}" stroke="#FFFFFF" stroke-width="2"/>""");
+            sb.Append(Inv, $"""<g transform="translate({F(x - 9.5)} {F(y - 9.5)}) scale(0.79)" fill="none" stroke="#FFFFFF" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="{style.Icon}"/></g>""");
             var label = place.Name.Length > 28 ? place.Name[..27] + "…" : place.Name;
-            var tagW = label.Length * 5.6 + 10;
-            var tagX = x + 14 + tagW > w ? x - 14 - tagW : x + 14;
-            sb.Append(Inv, $"""<rect x="{F(tagX)}" y="{F(y - 8)}" width="{F(tagW)}" height="16" rx="4" fill="#FFFFFF" fill-opacity="0.92" stroke="{style.Colour}" stroke-width="0.8"/>""");
-            sb.Append(Inv, $"""<text x="{F(tagX + 5)}" y="{F(y + 3.5)}" font-size="10" fill="#2B3440">{Esc(label)}</text>""");
+            var tagW = label.Length * 7.3 + 12;
+            var tagX = x + 18 + tagW > w ? x - 18 - tagW : x + 18;
+            sb.Append(Inv, $"""<rect x="{F(tagX)}" y="{F(y - 11)}" width="{F(tagW)}" height="22" rx="5" fill="#FFFFFF" fill-opacity="0.94" stroke="{style.Colour}" stroke-width="1"/>""");
+            sb.Append(Inv, $"""<text x="{F(tagX + 6)}" y="{F(y + 4.5)}" font-size="13" fill="#2B3440">{Esc(label)}</text>""");
         }
 
         var (sx, sy) = m.Subject is null ? (w / 2, h / 2) : Px(Geo.Centroid(m.Subject));
@@ -159,10 +181,14 @@ public static class AreaMapRenderer
         // Legend, scale bar, north and source.
         var legend = new List<(string Kind, string Text)> { ("subject", "This property") };
         if (m.Sales.Count > 0) legend.Add(("sale", "Comparable sale (numbered as in the table)"));
+        if (others.Count > 0) legend.Add(("other", "Other recent sale (price and year)"));
         if (m.RadiusM is { } r2) legend.Add(("radius", string.Create(Inv, $"Sales within {r2:0} m")));
         foreach (var g in shownGroups) legend.Add(("place:" + g, PlaceStyle[g].Title));
-        double lx = 14, ly = h - 16 - legend.Count * 19 - 10, lw = 250;
-        sb.Append(Inv, $"""<rect x="{lx}" y="{F(ly)}" width="{lw}" height="{legend.Count * 19 + 14}" rx="6" fill="#FFFFFF" fill-opacity="0.94" stroke="#D5DCE4"/>""");
+        // The block view is printed smaller, so its legend is larger.
+        var k = m.Block ? 1.25 : 1.0;
+        double row = 19 * k, lx = 14, ly = h - 16 - legend.Count * row - 10, lw = 250 * k;
+        sb.Append(Inv, $"""<rect x="{lx}" y="{F(ly)}" width="{F(lw)}" height="{F(legend.Count * row + 14)}" rx="6" fill="#FFFFFF" fill-opacity="0.94" stroke="#D5DCE4"/>""");
+        sb.Append(Inv, $"""<g transform="translate({F(lx)} {F(ly)}) scale({F(k)}) translate({F(-lx)} {F(-ly)})">""");
         for (int i = 0; i < legend.Count; i++)
         {
             double iy = ly + 16 + i * 19;
@@ -178,10 +204,12 @@ public static class AreaMapRenderer
             {
                 "subject" => string.Create(Inv, $"""<rect x="{lx + 10}" y="{F(iy - 8)}" width="14" height="11" fill="{SubjectFill}" stroke="{SubjectStroke}"/>"""),
                 "sale" => string.Create(Inv, $"""<rect x="{lx + 10}" y="{F(iy - 8)}" width="14" height="11" fill="{SaleFill}" stroke="{SaleStroke}"/>"""),
+                "other" => string.Create(Inv, $"""<rect x="{lx + 10}" y="{F(iy - 8)}" width="14" height="11" fill="{OtherFill}" stroke="{OtherStroke}"/>"""),
                 _ => string.Create(Inv, $"""<circle cx="{lx + 17}" cy="{F(iy - 2.5)}" r="6" fill="none" stroke="{SaleStroke}" stroke-width="1.6" stroke-dasharray="3 2"/>"""),
             });
             sb.Append(Inv, $"""<text x="{lx + 32}" y="{F(iy + 1)}" font-size="10.5" fill="#2B3440">{Esc(text)}</text>""");
         }
+        sb.Append("</g>");
 
         double target = 10;
         while (target * scale < 70) target = target switch { 10 => 20, 20 => 50, 50 => 100, 100 => 200, _ => target * 2 };
@@ -206,6 +234,7 @@ public static class AreaMapRenderer
         ["parks"] = "M16 5l3 3l-2 1l4 4l-3 1l4 4h-9 M15 21l0 -3 M8 13l-2 -2 M8 12l2 -2 M8 21v-13 M5.824 16a3 3 0 0 1 -2.743 -3.69a3 3 0 0 1 .304 -4.833a3 3 0 0 1 4.615 -3.707a3 3 0 0 1 4.614 3.707a3 3 0 0 1 .305 4.833a3 3 0 0 1 -2.919 3.695h-4l-.176 -.005",
         ["beach"] = "M17.553 16.75a7.5 7.5 0 0 0 -10.606 0 M18 3.804a6 6 0 0 0 -8.196 2.196l10.392 6a6 6 0 0 0 -2.196 -8.196 M16.732 10c1.658 -2.87 2.225 -5.644 1.268 -6.196c-.957 -.552 -3.075 1.326 -4.732 4.196 M15 9l-3 5.196 M3 19.25a2.4 2.4 0 0 1 1 -.25a2.4 2.4 0 0 1 2 1a2.4 2.4 0 0 0 2 1a2.4 2.4 0 0 0 2 -1a2.4 2.4 0 0 1 2 -1a2.4 2.4 0 0 1 2 1a2.4 2.4 0 0 0 2 1a2.4 2.4 0 0 0 2 -1a2.4 2.4 0 0 1 2 -1a2.4 2.4 0 0 1 1 .25",
         ["transport"] = "M21 13c0 -3.87 -3.37 -7 -10 -7h-8 M3 15h16a2 2 0 0 0 2 -2 M3 6v5h17.5 M3 11v4 M8 11v-5 M13 11v-4.5 M3 19h18",
+        ["fuel"] = "M14 11h1a2 2 0 0 1 2 2v3a1.5 1.5 0 0 0 3 0v-7l-3 -3 M4 20v-14a2 2 0 0 1 2 -2h6a2 2 0 0 1 2 2v14 M3 20l12 0 M18 7v1a1 1 0 0 0 1 1h1 M4 11l10 0",
         ["police"] = "M12 3a12 12 0 0 0 8.5 3a12 12 0 0 1 -8.5 15a12 12 0 0 1 -8.5 -15a12 12 0 0 0 8.5 -3",
     };
 
@@ -221,6 +250,7 @@ public static class AreaMapRenderer
         ["parks"] = ("#2E9E5B", "Park", Icons["parks"]),
         ["beach"] = ("#1E9BD7", "Beach", Icons["beach"]),
         ["transport"] = ("#4A5563", "Transport", Icons["transport"]),
+        ["fuel"] = ("#0E7C86", "Petrol station", Icons["fuel"]),
         ["police"] = ("#1F3A93", "Police", Icons["police"]),
     };
 
@@ -242,6 +272,11 @@ public static class AreaMapRenderer
     private static string HousePin(double x, double y, string colour, double k) =>
         string.Create(CultureInfo.InvariantCulture,
             $"""<g transform="translate({x:0.#} {y:0.#}) scale({k:0.##})"><path d="M0,0 L-6,-11 A12,12 0 1 1 6,-11 Z" fill="{colour}" stroke="#FFFFFF" stroke-width="1.6"/><path d="M0,-27 L-7,-20 L-5,-20 L-5,-13 L5,-13 L5,-20 L7,-20 Z" fill="#FFFFFF"/></g>""");
+
+    /// <summary>"R 2.95m", "R 850k": short enough for a tag on an erf.</summary>
+    private static string Money(decimal zar) => zar >= 1_000_000
+        ? string.Create(CultureInfo.InvariantCulture, $"R {zar / 1_000_000m:0.##}m")
+        : string.Create(CultureInfo.InvariantCulture, $"R {zar / 1000m:0}k");
 
     private static string Title(string s) => CultureInfo.InvariantCulture.TextInfo.ToTitleCase(s.ToLowerInvariant());
 

@@ -109,6 +109,7 @@ public class AreaDetailsService(IHttpClientFactory httpFactory, IMemoryCache cac
         ("parks", "Parks and recreation", ["leisure:park", "leisure:sports_centre", "leisure:golf_course"], 3, 3),
         ("beach", "Beach", ["natural:beach"], 5, 1),
         ("transport", "Transport", ["railway:station", "amenity:bus_station"], 5, 2),
+        ("fuel", "Petrol stations", ["amenity:fuel"], 3, 2),
         ("police", "Police", ["amenity:police"], 8, 1),
     ];
 
