@@ -17,7 +17,7 @@ public class ListingValuationRepository
     {
         using var connection = _connectionFactory.CreateConnection();
         var command = new CommandDefinition(
-            "SELECT lv.Id, lv.OwnersNetPrice, lv.AgentValuation, lv.CommissionPercent " +
+            "SELECT lv.Id, lv.OwnersNetPrice, lv.AgentValuation, lv.CommissionPercent, lv.LastPurchaseDate, lv.LastPurchasePriceZar " +
             "FROM ListingValuation lv INNER JOIN Listings l ON l.ListingValuationId = lv.Id WHERE l.Id = @ListingId",
             new { ListingId = listingId }, cancellationToken: cancellationToken);
         return await connection.QueryFirstOrDefaultAsync<ListingValuation>(command);
@@ -37,10 +37,14 @@ public class ListingValuationRepository
         if (valuationId is null)
         {
             var insertCommand = new CommandDefinition(
-                "INSERT INTO ListingValuation (OwnersNetPrice, AgentValuation, CommissionPercent) " +
+                "INSERT INTO ListingValuation (OwnersNetPrice, AgentValuation, CommissionPercent, LastPurchaseDate, LastPurchasePriceZar) " +
                 "OUTPUT INSERTED.Id " +
-                "VALUES (@OwnersNetPrice, @AgentValuation, @CommissionPercent)",
-                new { valuation.OwnersNetPrice, valuation.AgentValuation, valuation.CommissionPercent },
+                "VALUES (@OwnersNetPrice, @AgentValuation, @CommissionPercent, @LastPurchaseDate, @LastPurchasePriceZar)",
+                new
+                {
+                    valuation.OwnersNetPrice, valuation.AgentValuation, valuation.CommissionPercent,
+                    valuation.LastPurchaseDate, valuation.LastPurchasePriceZar,
+                },
                 transaction: transaction, cancellationToken: cancellationToken);
             valuationId = await connection.ExecuteScalarAsync<int>(insertCommand);
 
@@ -53,14 +57,19 @@ public class ListingValuationRepository
         else
         {
             var updateCommand = new CommandDefinition(
-                "UPDATE ListingValuation SET OwnersNetPrice = @OwnersNetPrice, AgentValuation = @AgentValuation, CommissionPercent = @CommissionPercent WHERE Id = @Id",
-                new { valuation.OwnersNetPrice, valuation.AgentValuation, valuation.CommissionPercent, Id = valuationId },
+                "UPDATE ListingValuation SET OwnersNetPrice = @OwnersNetPrice, AgentValuation = @AgentValuation, CommissionPercent = @CommissionPercent, " +
+                "LastPurchaseDate = @LastPurchaseDate, LastPurchasePriceZar = @LastPurchasePriceZar WHERE Id = @Id",
+                new
+                {
+                    valuation.OwnersNetPrice, valuation.AgentValuation, valuation.CommissionPercent,
+                    valuation.LastPurchaseDate, valuation.LastPurchasePriceZar, Id = valuationId,
+                },
                 transaction: transaction, cancellationToken: cancellationToken);
             await connection.ExecuteAsync(updateCommand);
         }
 
         var selectCommand = new CommandDefinition(
-            "SELECT Id, OwnersNetPrice, AgentValuation, CommissionPercent FROM ListingValuation WHERE Id = @Id",
+            "SELECT Id, OwnersNetPrice, AgentValuation, CommissionPercent, LastPurchaseDate, LastPurchasePriceZar FROM ListingValuation WHERE Id = @Id",
             new { Id = valuationId }, transaction: transaction, cancellationToken: cancellationToken);
         var result = await connection.QueryFirstOrDefaultAsync<ListingValuation>(selectCommand);
 

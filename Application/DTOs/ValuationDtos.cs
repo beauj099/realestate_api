@@ -1,16 +1,22 @@
 namespace RealEstateApi.Application.DTOs;
 
+/// <summary>LastPurchase*: when the owners bought and for how much, as they tell the agent (the
+/// City's sales record only goes back a few years; older transfers are with the Deeds Office).</summary>
 public record UpsertValuationRequest(
     decimal? OwnersNetPrice,
     decimal? AgentValuation,
-    decimal? CommissionPercent
+    decimal? CommissionPercent,
+    DateTime? LastPurchaseDate = null,
+    decimal? LastPurchasePriceZar = null
 );
 
 public record ValuationDto(
     int Id,
     decimal? OwnersNetPrice,
     decimal? AgentValuation,
-    decimal? CommissionPercent
+    decimal? CommissionPercent,
+    DateTime? LastPurchaseDate = null,
+    decimal? LastPurchasePriceZar = null
 );
 
 public record UpsertRunningCostsRequest(

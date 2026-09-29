@@ -1361,7 +1361,10 @@ namespace PropertyData.CapeTown.Services
             foreach (var c in raw
                          .Where(c => c.Exclusion is ComparableExclusion.DissimilarSize
                              or ComparableExclusion.TooFar or ComparableExclusion.TooOld)
-                         .OrderBy(c => SizeDistance(c, subjectDwelling, subjectErf))
+                         // Alike in size first, but a sale two years older counts
+                         // like one about 25% further off in size: today's market matters.
+                         .OrderBy(c => SizeDistance(c, subjectDwelling, subjectErf)
+                                       + 0.125 * (reportDate.DayNumber - c.SaleDate.DayNumber) / 365.25)
                          .ThenBy(c => c.DistanceM ?? double.MaxValue)
                          .Take(Math.Max(0, r.MinShown - included.Count)))
             {
