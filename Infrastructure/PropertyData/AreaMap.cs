@@ -12,7 +12,7 @@ public sealed record MapParcel(string? Erf, string? Number, Ring Ring);
 public sealed record MapRoad(string Name, string? Type, double? WidthM, IReadOnlyList<LatLng> Line);
 
 /// <summary>A comparable sale on the map, numbered as in the report's table.</summary>
-public sealed record MapSale(int Number, string? Erf, LatLng Location);
+public sealed record MapSale(int Number, string? Erf, LatLng Location, bool Reference = false);
 
 /// <summary>Another recent sale nearby (not one of the comparables): its erf, price and year.</summary>
 public sealed record MapOtherSale(string? Erf, LatLng Location, decimal PriceZar, int Year);
@@ -85,6 +85,7 @@ public static class AreaMapRenderer
             sb.Append(Inv, $"""<path d="{PathOf(pts, false)}" fill="none" stroke="{MainRoad}" stroke-width="{F(Math.Max((road.WidthM ?? 12) * scale, 4))}" stroke-linecap="round" stroke-linejoin="round"/>""");
 
         var sales = m.Sales.Where(s => s.Erf is not null).Select(s => s.Erf!).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var referenceErfs = m.Sales.Where(s => s.Reference && s.Erf is not null).Select(s => s.Erf!).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var others = (m.OtherSales ?? []).Where(o => o.Erf is not null && !sales.Contains(o.Erf))
             .GroupBy(o => o.Erf!, StringComparer.OrdinalIgnoreCase).Select(g => g.OrderByDescending(o => o.Year).First()).ToList();
         var otherErfs = others.Select(o => o.Erf!).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -95,6 +96,7 @@ public static class AreaMapRenderer
             var isSale = !isSubject && p.Erf is not null && sales.Contains(p.Erf);
             var isOther = !isSubject && !isSale && p.Erf is not null && otherErfs.Contains(p.Erf);
             var (fill, stroke, sw) = isSubject ? (SubjectFill, SubjectStroke, 1.6)
+                : isSale && referenceErfs.Contains(p.Erf!) ? (OtherFill, OtherStroke, 1.2)
                 : isSale ? (SaleFill, SaleStroke, 1.2)
                 : isOther ? (OtherFill, OtherStroke, 1.0)
                 : (ParcelFill, ParcelStroke, 0.7);
@@ -157,7 +159,7 @@ public static class AreaMapRenderer
         {
             var (x, y) = Px(s.Location);
             if (!Inside((x, y), w, h, 0)) continue;
-            sb.Append(Pin(x, y, SaleStroke, s.Number.ToString(Inv), m.Block ? 1.5 : 1));
+            sb.Append(Pin(x, y, s.Reference ? OtherStroke : SaleStroke, s.Number.ToString(Inv), m.Block ? 1.5 : 1));
         }
         // Nearby places with their group's icon and name.
         var shownGroups = new List<string>();
@@ -180,8 +182,9 @@ public static class AreaMapRenderer
 
         // Legend, scale bar, north and source.
         var legend = new List<(string Kind, string Text)> { ("subject", "This property") };
-        if (m.Sales.Count > 0) legend.Add(("sale", "Comparable sale (numbered as in the table)"));
-        if (others.Count > 0) legend.Add(("other", "Other recent sale (price and year)"));
+        if (m.Sales.Any(s => !s.Reference)) legend.Add(("sale", "Comparable sale (numbered as in the table)"));
+        if (m.Sales.Any(s => s.Reference)) legend.Add(("other", "Listed for reference, not in the range"));
+        if (others.Count > 0) legend.Add(("otherTag", "Other recent sale (price and year)"));
         if (m.RadiusM is { } r2) legend.Add(("radius", string.Create(Inv, $"Sales within {r2:0} m")));
         foreach (var g in shownGroups) legend.Add(("place:" + g, PlaceStyle[g].Title));
         // The block view is printed smaller, so its legend is larger.
@@ -205,6 +208,7 @@ public static class AreaMapRenderer
                 "subject" => string.Create(Inv, $"""<rect x="{lx + 10}" y="{F(iy - 8)}" width="14" height="11" fill="{SubjectFill}" stroke="{SubjectStroke}"/>"""),
                 "sale" => string.Create(Inv, $"""<rect x="{lx + 10}" y="{F(iy - 8)}" width="14" height="11" fill="{SaleFill}" stroke="{SaleStroke}"/>"""),
                 "other" => string.Create(Inv, $"""<rect x="{lx + 10}" y="{F(iy - 8)}" width="14" height="11" fill="{OtherFill}" stroke="{OtherStroke}"/>"""),
+                "otherTag" => string.Create(Inv, $"""<rect x="{lx + 8}" y="{F(iy - 9)}" width="18" height="12" rx="3" fill="#FFFFFF" stroke="{OtherStroke}"/><rect x="{lx + 12}" y="{F(iy - 5)}" width="10" height="4" fill="{SaleStroke}"/>"""),
                 _ => string.Create(Inv, $"""<circle cx="{lx + 17}" cy="{F(iy - 2.5)}" r="6" fill="none" stroke="{SaleStroke}" stroke-width="1.6" stroke-dasharray="3 2"/>"""),
             });
             sb.Append(Inv, $"""<text x="{lx + 32}" y="{F(iy + 1)}" font-size="10.5" fill="#2B3440">{Esc(text)}</text>""");

@@ -200,11 +200,13 @@ public class PropertyReportService(
         if (record.Location is not { } centre) return null;
 
         // Numbered as in the report's table: by place among the sales used.
+        // Then the sales listed for reference, numbered on after them.
         var sales = (record.Comparables?.Included ?? [])
+            .Concat((record.Comparables?.All ?? []).Where(c => c.Reference).OrderByDescending(c => c.SaleDate))
             .Select((c, i) => (c, Number: i + 1))
             .Where(x => x.c.Location is not null)
             .Select(x => new PropertyData.AreaMaps.MapSale(x.Number,
-                PropertyData.CapeTown.Clients.CapeTownSpatialClient.ErfKey(x.c.Erf), x.c.Location!))
+                PropertyData.CapeTown.Clients.CapeTownSpatialClient.ErfKey(x.c.Erf), x.c.Location!, x.c.Reference))
             .ToList();
         var radius = record.Comparables?.RadiusM;
         // The block view reaches about 250 m: the street, its neighbours and what is nearby.
@@ -246,7 +248,7 @@ public class PropertyReportService(
     private static List<PropertyData.AreaMaps.MapOtherSale> OtherSales(
         PropertyRecord record, LatLng centre, double extentM) =>
         (record.Comparables?.All ?? [])
-            .Where(c => !c.Included && c.Location is not null && c.SalePriceZar > 0
+            .Where(c => !c.Included && !c.Reference && c.Location is not null && c.SalePriceZar > 0
                         && c.Exclusion is not (ComparableExclusion.ZeroPrice
                             or ComparableExclusion.ImplausiblePrice
                             or ComparableExclusion.MultiPropertySale
@@ -354,8 +356,9 @@ public class PropertyReportService(
         // The included sales plus the near misses (marked), newest first: shows the filtering
         // was done, which is what lets an agent defend the range.
         Comparables: r.Comparables?.All
-            .Where(c => c.Included || c.Exclusion == ComparableExclusion.DissimilarSize)
+            .Where(c => c.Included || c.Reference || c.Exclusion == ComparableExclusion.DissimilarSize)
             .OrderByDescending(c => c.Included)
+            .ThenByDescending(c => c.Reference)
             .ThenByDescending(c => c.SaleDate)
             .Take(40)
             .Select(ToDto)
@@ -397,7 +400,7 @@ public class PropertyReportService(
         c.SaleDate.ToString("yyyy-MM-dd"), c.SalePriceZar, c.IndexedPriceZar,
         c.PricePerDwellingM2 is null ? null : Math.Round(c.PricePerDwellingM2.Value),
         c.Included, c.Included ? null : Describe(c.Exclusion),
-        c.DistanceM, c.Location?.Lat, c.Location?.Lng);
+        c.DistanceM, c.Location?.Lat, c.Location?.Lng, c.Reference);
 
     /// <summary>Sales that are a market price for one property (not R0, not a bulk deal).</summary>
     private static bool IsMarketSale(Comparable c) => c.Exclusion is not

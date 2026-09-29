@@ -44,7 +44,9 @@ public record ComparableDto(
     string Address, string? Erf, double ErfExtentM2, double DwellingExtentM2,
     string SaleDate, decimal SalePriceZar, decimal? IndexedPriceZar,
     decimal? PricePerDwellingM2, bool Included, string? ExcludedBecause,
-    double? DistanceM = null, double? Lat = null, double? Lng = null);
+    double? DistanceM = null, double? Lat = null, double? Lng = null,
+    // Listed for reference to show at least ten sales; not used for the range.
+    bool Reference = false);
 
 /// <summary>A registered sale of the subject property itself.</summary>
 public record SaleRecordDto(string SaleDate, decimal PriceZar);

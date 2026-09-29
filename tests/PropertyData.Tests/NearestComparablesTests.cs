@@ -69,6 +69,23 @@ public sealed class NearestComparablesTests(ITestOutputHelper output)
         set.Included.Should().HaveCount(4);
     }
 
+    [Fact]
+    public void Lists_ten_but_prices_only_from_the_alike_ones()
+    {
+        var today = new DateOnly(2026, 9, 27);
+        var alike = Enumerable.Range(0, 7).Select(i => Sale($"{100 + i}", 3_000_000m, today.AddMonths(-i - 1), 100 + i * 20)).ToList();
+        var small = Enumerable.Range(0, 8).Select(i => Sale($"{200 + i}", 1_500_000m, today.AddMonths(-i - 1), 200, dwelling: 120 + i * 5)).ToList();
+        var set = ComparableAnalyzer.Analyze([.. alike, .. small], Subject(), null, today);
+        var onlyAlike = ComparableAnalyzer.Analyze(alike.Select(c => c with { }).ToList(), Subject(), null, today);
+
+        set.Included.Should().HaveCount(7);
+        set.All.Count(c => c.Reference).Should().Be(3);
+        // The closest in size of the small ones.
+        set.All.Where(c => c.Reference).Select(c => c.Erf).Should().BeEquivalentTo(["205", "206", "207"]);
+        set.All.Where(c => c.Reference).Should().OnlyContain(c => !c.Included && c.IndexedPriceZar != null);
+        set.ImpliedValueMidZar.Should().Be(onlyAlike.ImpliedValueMidZar);
+    }
+
     /// <summary>Live: 10 Bosman Street, Strand (erf 4429) — the City's list covers all of Strand.</summary>
     [Fact]
     [Trait("Category", "Integration")]

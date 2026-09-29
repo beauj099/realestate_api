@@ -129,6 +129,9 @@ namespace PropertyData.Core.Models
         public decimal? IndexedPriceZar { get; set; }
         public ComparableExclusion Exclusion { get; set; } = ComparableExclusion.None;
         public bool Included => Exclusion == ComparableExclusion.None;
+
+        /// <summary>Not used for the range, but listed so the report always shows enough sales.</summary>
+        public bool Reference { get; set; }
     }
 
     public sealed record ComparableSet(
@@ -1261,6 +1264,8 @@ namespace PropertyData.CapeTown.Services
         int MinIncluded = 3,
         // Nearest first: keep the comparables within the first radius that still leaves this many.
         int MinNearby = 6,
+        // Listed at least this many: the next most alike sales fill up, for reference only.
+        int MinShown = 10,
         // How value scales with size: price ∝ size^0.6 (double the size, ~1.5× the price).
         double SizeElasticity = 0.6)
     {
@@ -1348,6 +1353,21 @@ namespace PropertyData.CapeTown.Services
                                      .ToList();
             foreach (var c in candidates.Where(c => !included.Contains(c)))
                 c.Exclusion = ComparableExclusion.DissimilarSize;
+
+            // 3. At least MinShown listed: the next most alike market sales (nearer ones first when
+            //    alike, older ones too), for reference. They do not move the range: a home half the
+            //    size says little about this one's value, but the agent and seller see the market.
+            foreach (var c in raw) c.Reference = false;
+            foreach (var c in raw
+                         .Where(c => c.Exclusion is ComparableExclusion.DissimilarSize
+                             or ComparableExclusion.TooFar or ComparableExclusion.TooOld)
+                         .OrderBy(c => SizeDistance(c, subjectDwelling, subjectErf))
+                         .ThenBy(c => c.DistanceM ?? double.MaxValue)
+                         .Take(Math.Max(0, r.MinShown - included.Count)))
+            {
+                c.Reference = true;
+                c.IndexedPriceZar ??= Index(c.SalePriceZar, c.SaleDate, reportDate, suburb);
+            }
 
             var perDwelling = Median(included.Where(c => c.DwellingExtentM2 > 0)
                                              .Select(c => (c.IndexedPriceZar ?? c.SalePriceZar) / (decimal)c.DwellingExtentM2));
