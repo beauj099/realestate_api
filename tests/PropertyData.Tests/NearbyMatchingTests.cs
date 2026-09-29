@@ -1,3 +1,4 @@
+using FluentAssertions;
 using PropertyData.Core.Models;
 using PropertyData.Listings;
 using RealEstateApi.Application.Services;
@@ -74,5 +75,27 @@ public class NearbyMatchingTests
         Assert.InRange(latMax!.Value - latMin!.Value, 0.026, 0.028);
         Assert.True(lngMax - lngMin > latMax - latMin);   // degrees of longitude are shorter here
         Assert.Equal((null, null, null, null), AgentComparableRepository.NearBox(null, null, 1500));
+    }
+
+    [Fact]
+    public void Takes_only_the_listing_photos_never_the_agent_or_the_agency()
+    {
+        const string html = """
+            <div class="js_lightboxImageSrc" rel="photo[pp_gal]" data-lightbox-src="https://images.prop24.com/387073897"></div>
+            <div class="js_lightboxImageSrc" rel="photo[pp_gal]" data-lightbox-src="https://images.prop24.com/387073898"></div>
+            "primaryAgent":{"name":"Agent","imageURL":"https://images.prop24.com/382946075/UpperCrop200x200"}
+            <img src="https://images.prop24.com/318867240/Fit450x225" alt="agency logo" />
+            """;
+        Property24Client.ParseGallery(html).Should().Equal(
+            "https://images.prop24.com/387073897/Crop600x400",
+            "https://images.prop24.com/387073898/Crop600x400");
+    }
+
+    [Fact]
+    public void Picks_three_more_photos_spread_through_the_gallery()
+    {
+        var gallery = Enumerable.Range(1, 21).Select(i => $"p{i}").ToList();
+        ForSaleListingsService.MorePhotos(gallery).Should().Equal("p7", "p12", "p16");
+        ForSaleListingsService.MorePhotos(["only"]).Should().BeEmpty();
     }
 }

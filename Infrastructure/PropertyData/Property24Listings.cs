@@ -57,7 +57,8 @@ namespace PropertyData.Listings
         string? ImageUrl,
         DateOnly? ListedOn = null,
         double? Lat = null,
-        double? Lng = null);
+        double? Lng = null,
+        IReadOnlyList<string>? Photos = null);
 
     /// <summary>A suburb Property24 lists as surrounding another, with its number of listings.</summary>
     public sealed record P24Neighbour(int Id, string Name, int Count);
@@ -188,6 +189,7 @@ namespace PropertyData.Listings
                     ErfM2 = detail.ErfM2 ?? listing.ErfM2,
                     Lat = detail.Lat ?? listing.Lat,
                     Lng = detail.Lng ?? listing.Lng,
+                    Photos = detail.Photos.Count > 0 ? detail.Photos : listing.Photos,
                 };
             }
             catch (HttpRequestException ex)
@@ -283,17 +285,31 @@ namespace PropertyData.Listings
             return inSouthAfrica && !countryCentre ? (lat, lng) : (null, null);
         }
 
+        private static readonly Regex GalleryPhoto = new(
+            @"js_lightboxImageSrc""[^>]*data-lightbox-src=""https://images\.prop24\.com/(?<id>\d+)""",
+            RegexOptions.Compiled);
+
+        /// <summary>
+        /// The listing's own photos, in gallery order (the lightbox sources). Only these: the
+        /// agent's photo and the agency's logo on the page are not property photos.
+        /// </summary>
+        public static IReadOnlyList<string> ParseGallery(string html) =>
+            GalleryPhoto.Matches(html).Select(m => m.Groups["id"].Value).Distinct()
+                .Select(id => $"https://images.prop24.com/{id}/Crop600x400").ToList();
+
         private static P24Details ParseDetails(string html)
         {
             var (lat, lng) = ParseLocation(html);
+            var photos = ParseGallery(html);
             var doc = new HtmlDocument();
             doc.LoadHtml(html);
             foreach (var n in doc.DocumentNode.SelectNodes("//script|//style")?.ToList() ?? []) n.Remove();
             var (listed, floor, erf) = ParseDetailsText(Clean(doc.DocumentNode.InnerText));
-            return new P24Details(listed, floor, erf, lat, lng);
+            return new P24Details(listed, floor, erf, lat, lng, photos);
         }
 
-        private sealed record P24Details(DateOnly? ListedOn, double? FloorM2, double? ErfM2, double? Lat, double? Lng);
+        private sealed record P24Details(DateOnly? ListedOn, double? FloorM2, double? ErfM2, double? Lat, double? Lng,
+            IReadOnlyList<string> Photos);
 
         private async Task<string> GetAsync(string url, CancellationToken ct)
         {

@@ -7,7 +7,7 @@ public record ForSaleSuburbDto(int Id, string Name, string Town, string Url);
 public record ForSaleListingDto(
     string ListingNumber, string Url, decimal? PriceZar, string Title, string? Suburb, string? Address,
     string? Excerpt, int? Bedrooms, double? Bathrooms, int? Parking, double? FloorM2, double? ErfM2,
-    string? ImageUrl, string? ListedOn, double? DistanceM = null);
+    string? ImageUrl, string? ListedOn, double? DistanceM = null, IReadOnlyList<string>? MorePhotos = null);
 
 /// <summary>
 /// Homes for sale near the property, from Property24, credited to Property24 and linked to it.
@@ -126,8 +126,21 @@ public class ForSaleListingsService(Property24Client p24, ILogger<ForSaleListing
                 c.Listing.Title, c.Listing.Suburb, c.Listing.Address, c.Listing.Excerpt, c.Listing.Bedrooms,
                 c.Listing.Bathrooms, c.Listing.Parking, c.Listing.FloorM2, c.Listing.ErfM2, c.Listing.ImageUrl,
                 c.Listing.ListedOn?.ToString("yyyy-MM-dd"),
-                c.DistanceM is null ? null : Math.Round(c.DistanceM.Value))).ToList(),
+                c.DistanceM is null ? null : Math.Round(c.DistanceM.Value),
+                MorePhotos(c.Listing.Photos))).ToList(),
             alsoSearched.Select(Dto).ToList());
+    }
+
+    /// <summary>
+    /// Three more of a listing's photos, spread through its gallery (a quarter, half and three
+    /// quarters of the way), so the card shows more of the home than the first rooms.
+    /// </summary>
+    public static IReadOnlyList<string> MorePhotos(IReadOnlyList<string>? gallery)
+    {
+        if (gallery is null || gallery.Count < 2) return [];
+        var rest = gallery.Skip(1).ToList();                   // the first is the main photo
+        if (rest.Count <= 3) return rest;
+        return new[] { 0.25, 0.5, 0.75 }.Select(q => rest[(int)Math.Round(q * (rest.Count - 1))]).Distinct().ToList();
     }
 
     /// <summary>
