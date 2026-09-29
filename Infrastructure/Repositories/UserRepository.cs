@@ -24,6 +24,31 @@ public class UserRepository
         return await connection.QueryFirstOrDefaultAsync<User>(command);
     }
 
+    /// <summary>
+    /// An account deleted within the grace period (<see cref="Application.Services.AccountDeletionService.GraceDays"/>),
+    /// by username or email: signing in restores it. Null for anything else, including accounts
+    /// switched off by an admin (no deletion date) or already anonymised.
+    /// </summary>
+    public async Task<User?> GetPendingDeletionAsync(string username, CancellationToken cancellationToken = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        var command = new CommandDefinition(
+            $"SELECT {SelectColumns} FROM Users WHERE (Username = @Username OR Email = @Username) AND IsActive = 0 " +
+            "AND DeletionRequestedAt IS NOT NULL AND DeletionRequestedAt >= DATEADD(day, -@Days, SYSUTCDATETIME())",
+            new { Username = username, Days = Application.Services.AccountDeletionService.GraceDays },
+            cancellationToken: cancellationToken);
+        return await connection.QueryFirstOrDefaultAsync<User>(command);
+    }
+
+    /// <summary>Ends a deletion's grace period: the account is active again, as it was.</summary>
+    public async Task RestoreAsync(int id, CancellationToken cancellationToken = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        await connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE Users SET IsActive = 1, DeletionRequestedAt = NULL WHERE Id = @Id AND DeletionRequestedAt IS NOT NULL",
+            new { Id = id }, cancellationToken: cancellationToken));
+    }
+
     public async Task<User?> GetByEmailAsync(string email, CancellationToken cancellationToken = default)
     {
         using var connection = _connectionFactory.CreateConnection();

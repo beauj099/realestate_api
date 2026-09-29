@@ -62,8 +62,21 @@ public class AuthService
             return null;
 
         var user = await _userRepository.GetByUsernameAsync(username, cancellationToken);
+        var restoring = false;
+        if (user is null)
+        {
+            // An account deleted less than 90 days ago: signing in brings it back as it was.
+            user = await _userRepository.GetPendingDeletionAsync(username, cancellationToken);
+            restoring = user is not null;
+        }
         if (user is null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
             return null;
+        if (restoring)
+        {
+            await _userRepository.RestoreAsync(user.Id, cancellationToken);
+            user.IsActive = true;
+            _logger.LogInformation("Account {UserId} restored by signing in during its grace period", user.Id);
+        }
 
         var tokenHandler = new JwtSecurityTokenHandler();
         var key = Encoding.UTF8.GetBytes(_jwtOptions.Secret);
@@ -177,6 +190,10 @@ public class AuthService
 
         var existingByEmail = await _userRepository.GetByEmailAsync(normalizedEmail, cancellationToken);
         if (existingByEmail is not null)
+            return null;
+
+        // A deleted account still in its grace period keeps its email: sign in to restore it.
+        if (await _userRepository.GetPendingDeletionAsync(normalizedEmail, cancellationToken) is not null)
             return null;
 
         // Also block duplicate Username (email stored as username)

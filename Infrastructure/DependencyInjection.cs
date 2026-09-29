@@ -95,6 +95,7 @@ public static class DependencyInjection
         // Monthly check that every municipal source still answers as expected (emails on failure).
         services.Configure<DataSourceCheckOptions>(configuration.GetSection(DataSourceCheckOptions.SectionName));
         services.AddHostedService<MonthlyDataSourceCheck>();
+        services.AddHostedService<DailyAccountPurge>();
         services.AddHttpClient("imagery", c => c.Timeout = TimeSpan.FromSeconds(20));
 
         return services;

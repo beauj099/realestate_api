@@ -7,13 +7,14 @@ using RealEstateApi.Infrastructure.Services;
 namespace RealEstateApi.Application.Services;
 
 /// <summary>
-/// Deletes an agent's account, as app stores require, while their listings stay: the listings,
-/// their photos and details belong to the agency's records, and the sales the agent logged stay in
-/// the shared market data. So the user row is kept (listings and logged sales point at it) but
-/// emptied of everything about the agent and disabled for good: name, email, phone, registration
-/// numbers and password are replaced, and sign-in and token refresh already refuse an inactive
-/// user. The agent's own profile (photo, signature, bio, office details) and sign-in tokens are
-/// deleted. The password is asked again, so a phone left signed in cannot delete an account.
+/// Deleting an account, with a grace period. "Delete account" disables it at once (no sign-in, no
+/// tokens) and records when; everything is kept, and signing in again within
+/// <see cref="GraceDays"/> days restores it (<see cref="UserRepository.GetPendingDeletionAsync"/>).
+/// After that, <see cref="PurgeDueAsync"/> (daily) deletes what is the agent's: name, email, phone,
+/// registration numbers and password are replaced, and the profile with its images is deleted.
+/// The user row stays, anonymised and disabled, because the agent's listings (the agency's records)
+/// and logged sales point at it; they stay too. Accounts switched off for any other reason have no
+/// deletion date and are never touched.
 /// </summary>
 public class AccountDeletionService(
     UserRepository users,
@@ -23,8 +24,12 @@ public class AccountDeletionService(
     DbConnectionFactory connections,
     ILogger<AccountDeletionService> log)
 {
+    /// <summary>How long a deleted account can still be restored by signing in.</summary>
+    public const int GraceDays = 90;
+
     public enum Result { Deleted, WrongPassword, NotFound }
 
+    /// <summary>Disables the account and starts the grace period. The password is asked again.</summary>
     public async Task<Result> DeleteAsync(int userId, string password, CancellationToken ct)
     {
         var user = await users.GetByIdAsync(userId, ct);
@@ -32,6 +37,36 @@ public class AccountDeletionService(
         if (string.IsNullOrEmpty(password) || !BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
             return Result.WrongPassword;
 
+        using var db = connections.CreateConnection();
+        await db.ExecuteAsync(new CommandDefinition("""
+            DELETE FROM dbo.RefreshTokens WHERE UserId = @id;
+            DELETE FROM dbo.PasswordResetCodes WHERE UserId = @id;
+            UPDATE dbo.Users SET IsActive = 0, DeletionRequestedAt = SYSUTCDATETIME() WHERE Id = @id;
+            """, new { id = userId }, cancellationToken: ct));
+        log.LogInformation("Account {UserId} deleted; restorable for {Days} days", userId, GraceDays);
+        return Result.Deleted;
+    }
+
+    /// <summary>Anonymises every account whose grace period is over. Returns how many.</summary>
+    public async Task<int> PurgeDueAsync(CancellationToken ct)
+    {
+        List<int> due;
+        using (var db = connections.CreateConnection())
+        {
+            due = (await db.QueryAsync<int>(new CommandDefinition("""
+                SELECT Id FROM dbo.Users
+                WHERE IsActive = 0 AND DeletionRequestedAt IS NOT NULL
+                  AND DeletionRequestedAt < DATEADD(day, -@days, SYSUTCDATETIME())
+                  AND Username NOT LIKE 'deleted-%'
+                """, new { days = GraceDays }, cancellationToken: ct))).ToList();
+        }
+        foreach (var id in due) await AnonymiseAsync(id, ct);
+        if (due.Count > 0) log.LogInformation("Anonymised {Count} account(s) after the grace period", due.Count);
+        return due.Count;
+    }
+
+    private async Task AnonymiseAsync(int userId, CancellationToken ct)
+    {
         // The profile's images, before the row that points at them goes.
         var profile = await profiles.GetAsync(userId, ct);
         var imageUrls = new[] { profile?.PhotoUrl, profile?.SignatureUrl }
@@ -63,14 +98,12 @@ public class AccountDeletionService(
             tx.Commit();
         }
 
-        // Best effort: an orphaned image is harmless, a failed delete of the account is not.
+        // Best effort: an orphaned image is harmless, a failed purge is not.
         foreach (var key in imageUrls.Select(u => KeyOf(u, userId)).OfType<string>())
         {
             try { await images.DeleteAsync(key, ct); }
             catch (Exception ex) { log.LogWarning(ex, "Could not delete {Key} of a deleted account", key); }
         }
-        log.LogInformation("Account {UserId} deleted (anonymised; listings kept)", userId);
-        return Result.Deleted;
     }
 
     private static IEnumerable<string?> ReadLogoUrls(string? json)
@@ -94,5 +127,32 @@ public class AccountDeletionService(
             : null;
         key = key?.Split('?')[0];
         return key is not null && key.StartsWith($"agents/{userId}/", StringComparison.Ordinal) ? key : null;
+    }
+}
+
+/// <summary>Once a day (03:20 SAST), anonymises the accounts whose grace period has ended.</summary>
+public class DailyAccountPurge(IServiceScopeFactory scopes, ILogger<DailyAccountPurge> log) : BackgroundService
+{
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        var sast = TimeZoneInfo.CreateCustomTimeZone("SAST", TimeSpan.FromHours(2), "SAST", "SAST");
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            var now = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, sast);
+            var next = new DateTimeOffset(now.Year, now.Month, now.Day, 3, 20, 0, now.Offset);
+            if (next <= now) next = next.AddDays(1);
+            try { await Task.Delay(next - now, stoppingToken); }
+            catch (OperationCanceledException) { return; }
+
+            try
+            {
+                using var scope = scopes.CreateScope();
+                await scope.ServiceProvider.GetRequiredService<AccountDeletionService>().PurgeDueAsync(stoppingToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                log.LogError(ex, "The daily account purge failed; it runs again tomorrow");
+            }
+        }
     }
 }

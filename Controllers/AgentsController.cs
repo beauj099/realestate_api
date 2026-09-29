@@ -25,9 +25,9 @@ public class AgentsController : ControllerBase
     }
 
     /// <summary>
-    /// Deletes the signed-in agent's account and everything that is theirs (see
-    /// <see cref="AccountDeletionService"/>). The password is asked again. 204 when done, 400 with
-    /// a "password" error when it is wrong.
+    /// Deletes the signed-in agent's account: disabled at once, restorable by signing in for 90
+    /// days, then anonymised; listings stay (see <see cref="AccountDeletionService"/>). The password
+    /// is asked again. 204 when done, 400 with a "password" error when it is wrong.
     /// </summary>
     [HttpPost("me/delete")]
     public async Task<IActionResult> DeleteMe([FromBody] DeleteAccountRequest request,
