@@ -7,16 +7,16 @@ using RealEstateApi.Infrastructure.Services;
 namespace RealEstateApi.Application.Services;
 
 /// <summary>
-/// Deletes an agent's account and what is theirs, as app stores require: every listing they
-/// captured (owners, rooms, photos, documents, through <see cref="ListingService.DeleteAsync(int, int?, bool, CancellationToken)"/>),
-/// the sales they logged, their profile and its images, and their sign-in tokens. An agency they
-/// added stays for the agents using it, no longer linked to them. The password is asked again,
-/// so a phone left signed in cannot delete an account.
+/// Deletes an agent's account, as app stores require, while their listings stay: the listings,
+/// their photos and details belong to the agency's records, and the sales the agent logged stay in
+/// the shared market data. So the user row is kept (listings and logged sales point at it) but
+/// emptied of everything about the agent and disabled for good: name, email, phone, registration
+/// numbers and password are replaced, and sign-in and token refresh already refuse an inactive
+/// user. The agent's own profile (photo, signature, bio, office details) and sign-in tokens are
+/// deleted. The password is asked again, so a phone left signed in cannot delete an account.
 /// </summary>
 public class AccountDeletionService(
     UserRepository users,
-    ListingRepository listings,
-    ListingService listingService,
     AgentProfileRepository profiles,
     IImageStorage images,
     IOptions<R2Options> r2,
@@ -28,13 +28,9 @@ public class AccountDeletionService(
     public async Task<Result> DeleteAsync(int userId, string password, CancellationToken ct)
     {
         var user = await users.GetByIdAsync(userId, ct);
-        if (user is null) return Result.NotFound;
+        if (user is null || !user.IsActive) return Result.NotFound;
         if (string.IsNullOrEmpty(password) || !BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
             return Result.WrongPassword;
-
-        // Listings first, one by one, so each takes its photos and documents with it.
-        foreach (var listing in await listings.GetAllAsync(null, null, null, userId, false, ct))
-            await listingService.DeleteAsync(listing.Id, userId, false, ct);
 
         // The profile's images, before the row that points at them goes.
         var profile = await profiles.GetAsync(userId, ct);
@@ -46,13 +42,24 @@ public class AccountDeletionService(
             db.Open();
             using var tx = db.BeginTransaction();
             await db.ExecuteAsync(new CommandDefinition("""
-                DELETE FROM dbo.AgentComparables WHERE CapturedByUserId = @id;
                 DELETE FROM dbo.PasswordResetCodes WHERE UserId = @id;
                 DELETE FROM dbo.RefreshTokens WHERE UserId = @id;
                 DELETE FROM dbo.AgentProfiles WHERE UserId = @id;
-                UPDATE dbo.Agencies SET CreatedByUserId = NULL WHERE CreatedByUserId = @id;
-                DELETE FROM dbo.Users WHERE Id = @id;
-                """, new { id = userId }, tx, cancellationToken: ct));
+                -- Kept for the listings and logged sales that point at it; nothing of the agent
+                -- left. The email stays unique (it has a unique index) and is not a real address.
+                UPDATE dbo.Users SET
+                    Username = CONCAT('deleted-', Id),
+                    Email = CONCAT('deleted-', Id, '@deleted.invalid'),
+                    DisplayName = 'Former agent',
+                    FullName = NULL, Mobile = NULL,
+                    AgencyRegistrationNumber = NULL, LicenceNumber = NULL,
+                    PasswordHash = @unusable,
+                    IsActive = 0
+                WHERE Id = @id;
+                """,
+                // A hash of a random secret nobody knows: the old password stops working too.
+                new { id = userId, unusable = BCrypt.Net.BCrypt.HashPassword(Guid.NewGuid().ToString("N")) },
+                tx, cancellationToken: ct));
             tx.Commit();
         }
 
@@ -62,7 +69,7 @@ public class AccountDeletionService(
             try { await images.DeleteAsync(key, ct); }
             catch (Exception ex) { log.LogWarning(ex, "Could not delete {Key} of a deleted account", key); }
         }
-        log.LogInformation("Account {UserId} deleted", userId);
+        log.LogInformation("Account {UserId} deleted (anonymised; listings kept)", userId);
         return Result.Deleted;
     }
 
