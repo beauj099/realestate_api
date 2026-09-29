@@ -25,6 +25,7 @@ public class PropertyReportService(
     IMemoryCache cache,
     ImageryLinkBuilder imagery,
     AgentComparableService agentComparables,
+    AreaDetailsService area,
     ILogger<PropertyReportService> log)
 {
     private static readonly TimeSpan RecordTtl = TimeSpan.FromHours(12);
@@ -88,9 +89,33 @@ public class PropertyReportService(
                 var inSuburb = refs.Where(r => r.Suburb.StartsWith(suburb, StringComparison.OrdinalIgnoreCase)).ToList();
                 if (inSuburb.Count > 0) refs = inSuburb;
             }
+            // Suburb names differ between sources ("Die Vlakte" on a map is "Strand" to the City),
+            // so any place typed after the street counts: the suburb, else the town.
+            if (refs.Count > 1) refs = ByPlacesTyped(refs, request.Address);
         }
 
         return refs.Select(r => new PropertyCandidateDto(r.Municipality, r.Erf, r.Sg26, r.Suburb, r.Township)).ToList();
+    }
+
+    /// <summary>
+    /// Candidates in a place named after the street ("…, Die Vlakte, Strand") first: its suburb
+    /// or its township ("THE STRAND") matching any of the places typed.
+    /// </summary>
+    public static IReadOnlyList<PropertyRef> ByPlacesTyped(IReadOnlyList<PropertyRef> refs, string? address)
+    {
+        var places = (address ?? "").Split(',').Skip(1)
+            .Select(Key).Where(p => p.Length >= 3).ToList();
+        if (places.Count == 0) return refs;
+        static string Key(string s)
+        {
+            var k = new string(s.ToUpperInvariant().Where(c => char.IsLetterOrDigit(c) || c == ' ').ToArray()).Trim();
+            return k.StartsWith("THE ", StringComparison.Ordinal) ? k[4..] : k;
+        }
+        int Score(PropertyRef r) =>
+            places.Any(p => Key(r.Suburb).StartsWith(p, StringComparison.Ordinal)) ? 2
+            : places.Any(p => Key(r.Township).StartsWith(p, StringComparison.Ordinal)) ? 1
+            : 0;
+        return refs.OrderByDescending(Score).ToList();
     }
 
     private static string? TypedSuburb(ResolvePropertyRequest request)
@@ -121,47 +146,6 @@ public class PropertyReportService(
         }
     }
 
-    /// <summary>Address type-ahead from the City's parcel records. Cached an hour per query.</summary>
-    public async Task<IReadOnlyList<AddressSuggestionDto>> SuggestAsync(string query, CancellationToken ct)
-    {
-        var q = query.Trim();
-        if (q.Length < 3) return [];
-        var key = $"suggest:{q.ToUpperInvariant()}";
-        if (cache.TryGetValue(key, out IReadOnlyList<AddressSuggestionDto>? hit) && hit is not null) return hit;
-
-        // Both cities at once; a city that is down just contributes nothing.
-        async Task<List<PropertyData.CapeTown.Clients.AddressSuggestion>> Safe(
-            Func<Task<List<PropertyData.CapeTown.Clients.AddressSuggestion>>> call)
-        {
-            try { return await call(); }
-            catch (HttpRequestException ex) { log.LogWarning(ex, "Suggestion source did not answer"); return []; }
-        }
-        var ctTask = Safe(() => capeTown.SuggestAsync(q, 8, ct));
-        var jhbTask = Safe(() => johannesburg.SuggestAsync(q, 8, ct));
-        await Task.WhenAll(ctTask, jhbTask);
-
-        AddressSuggestionDto Dto(PropertyData.CapeTown.Clients.AddressSuggestion s, string municipality, string city, string province)
-        {
-            var street = TitleCase(string.Join(' ', new[] { s.StreetName, s.StreetType }.Where(p => !string.IsNullOrWhiteSpace(p))));
-            var number = s.StreetNumber is null ? null : $"{s.StreetNumber}{s.StreetNumberSuffix}";
-            var suburb = TitleCase(s.Suburb);
-            return new AddressSuggestionDto(
-                Label: $"{(number is null ? "" : number + " ")}{street}, {suburb}",
-                StreetNumber: number, StreetName: street, Suburb: suburb,
-                City: city, Province: province, Country: "South Africa",
-                Erf: s.Erf, Sg26: s.Sg26, Lat: s.Location?.Lat, Lng: s.Location?.Lng,
-                Municipality: municipality);
-        }
-
-        IReadOnlyList<AddressSuggestionDto> result = ctTask.Result.Select(s => Dto(s, CapeTown, "Cape Town", "Western Cape"))
-            .Concat(jhbTask.Result.Select(s => Dto(s, Johannesburg, "Johannesburg", "Gauteng")))
-            .Take(10)
-            .ToList();
-
-        cache.Set(key, result, TimeSpan.FromHours(1));
-        return result;
-    }
-
     private static string TitleCase(string s) =>
         System.Globalization.CultureInfo.InvariantCulture.TextInfo.ToTitleCase(s.ToLowerInvariant());
 
@@ -181,7 +165,8 @@ public class PropertyReportService(
             .Select(c => new MunicipalSale(c.Address, c.Erf, c.SaleDate, c.SalePriceZar))
             .ToList() ?? [];
         var agentSales = await agentComparables.ForReportAsync(userId, record.Ref.Municipality, record.Ref.Suburb,
-            municipalSales, record.DataSource, record.DwellingExtentM2, record.BestExtentM2, ct);
+            municipalSales, record.DataSource, record.DwellingExtentM2, record.BestExtentM2, ct,
+            record.Location?.Lat, record.Location?.Lng);
         return report with { AgentComparables = agentSales };
     }
 
@@ -195,6 +180,95 @@ public class PropertyReportService(
         return SitePlanRenderer.Render(record, new SitePlanOptions(
             WidthPx: width > 0 ? width : 900,
             HeightPx: height > 0 ? height : 650));
+    }
+
+    /// <summary>
+    /// The neighbourhood map (SVG): <paramref name="block"/> false draws the comparable sales in
+    /// the radius they were drawn from; true draws the property's block close up. Cape Town only
+    /// (null elsewhere, where the parcels and roads are not published this way).
+    /// </summary>
+    public async Task<string?> GetAreaMapSvgAsync(string municipality, string erf, string? suburb, string? sg26,
+        bool block, int width, int height, CancellationToken ct)
+    {
+        if (!string.Equals(municipality, CapeTown, StringComparison.OrdinalIgnoreCase)) return null;
+        var key = $"areamap:{municipality}:{erf}:{(suburb ?? "").ToUpperInvariant()}:{block}:{width}x{height}";
+        if (cache.TryGetValue(key, out string? hit) && hit is not null) return hit;
+
+        var record = Cached(municipality, erf, suburb) is { Comparables: not null } cached
+            ? cached
+            : await GetRecordAsync(municipality, erf, suburb, sg26, new RecordOptions(), "full", ct);
+        if (record.Location is not { } centre) return null;
+
+        // Numbered as in the report's table: by place among the sales used.
+        // Then the sales listed for reference, numbered on after them.
+        var sales = (record.Comparables?.Included ?? [])
+            .Concat((record.Comparables?.All ?? []).Where(c => c.Reference).OrderByDescending(c => c.SaleDate))
+            .Select((c, i) => (c, Number: i + 1))
+            .Where(x => x.c.Location is not null)
+            .Select(x => new PropertyData.AreaMaps.MapSale(x.Number,
+                PropertyData.CapeTown.Clients.CapeTownSpatialClient.ErfKey(x.c.Erf), x.c.Location!, x.c.Reference))
+            .ToList();
+        var radius = record.Comparables?.RadiusM;
+        // The block view reaches about 250 m: the street, its neighbours and what is nearby.
+        var extent = block
+            ? 250
+            : Math.Max(Math.Max(radius ?? 0, sales.Select(s => PropertyData.CapeTown.Internal.Geo.DistanceM(centre, s.Location)).DefaultIfEmpty(150).Max()), 150) * 1.08;
+
+        // A box a little larger than the drawing, so erven at the edge are whole.
+        var dLat = extent * 1.15 / 110_540.0;
+        var dLng = extent * 1.15 / (111_320.0 * Math.Cos(centre.Lat * Math.PI / 180));
+        var sw = new LatLng(centre.Lat - dLat, centre.Lng - dLng);
+        var ne = new LatLng(centre.Lat + dLat, centre.Lng + dLng);
+        var parcels = await capeTown.GetParcelsInBoxAsync(sw, ne, ct);
+        List<(string Name, string? Type, double? WidthM, List<LatLng> Line)> roads;
+        try { roads = await capeTown.GetRoadsInBoxAsync(sw, ne, ct); }
+        catch (HttpRequestException ex) { log.LogWarning(ex, "Road centrelines unavailable; map without street names"); roads = []; }
+
+        var svg = PropertyData.AreaMaps.AreaMapRenderer.Render(new PropertyData.AreaMaps.AreaMapInput(
+            centre, record.Boundary, PropertyData.CapeTown.Clients.CapeTownSpatialClient.ErfKey(record.Ref.Erf),
+            parcels.Select(p => new PropertyData.AreaMaps.MapParcel(p.Erf, p.Number, p.Ring)).ToList(),
+            roads.Select(r => new PropertyData.AreaMaps.MapRoad(r.Name, r.Type, r.WidthM, r.Line)).ToList(),
+            block ? sales.Where(s => PropertyData.CapeTown.Internal.Geo.DistanceM(centre, s.Location) <= extent).ToList() : sales,
+            extent, block ? null : radius,
+            width > 0 ? width : 900, height > 0 ? height : (block ? 560 : 900),
+            block ? "Map: City of Cape Town open data; places: OpenStreetMap contributors"
+                  : "Map: City of Cape Town open data (cadastre, road centrelines)",
+            Block: block,
+            Places: block ? await NearbyPlacesAsync(centre, extent, ct) : null,
+            OtherSales: block ? OtherSales(record, centre, extent) : null));
+        cache.Set(key, svg, RecordTtl);
+        return svg;
+    }
+
+    /// <summary>
+    /// Every other sale on the City's record around the property (not used as a comparable: a
+    /// different size, older, or no building), for the block view. Transfers of several properties
+    /// at one price and implausible prices are left out: their price is not this erf's.
+    /// </summary>
+    private static List<PropertyData.AreaMaps.MapOtherSale> OtherSales(
+        PropertyRecord record, LatLng centre, double extentM) =>
+        (record.Comparables?.All ?? [])
+            .Where(c => !c.Included && !c.Reference && c.Location is not null && c.SalePriceZar > 0
+                        && c.Exclusion is not (ComparableExclusion.ZeroPrice
+                            or ComparableExclusion.ImplausiblePrice
+                            or ComparableExclusion.MultiPropertySale
+                            or ComparableExclusion.IsSubject)
+                        && PropertyData.CapeTown.Internal.Geo.DistanceM(centre, c.Location) <= extentM * 1.2)
+            .Select(c => new PropertyData.AreaMaps.MapOtherSale(
+                PropertyData.CapeTown.Clients.CapeTownSpatialClient.ErfKey(c.RegisteredDescription.Split(' ', 2)[0]),
+                c.Location!, c.SalePriceZar, c.SaleDate.Year))
+            .ToList();
+
+    /// <summary>Nearby schools, shops, clinics and parks inside the map; none when unavailable.</summary>
+    private async Task<IReadOnlyList<PropertyData.AreaMaps.MapPlace>> NearbyPlacesAsync(LatLng centre, double extentM,
+        CancellationToken ct)
+    {
+        var groups = await area.NearbyCachedAsync(centre.Lat, centre.Lng, ct) ?? [];
+        return groups.SelectMany(g => g.Places
+                .Where(p => Math.Abs(p.Lat - centre.Lat) * 110_540 < extentM
+                            && Math.Abs(p.Lng - centre.Lng) * 111_320 * Math.Cos(centre.Lat * Math.PI / 180) < extentM * 1.5)
+                .Select(p => new PropertyData.AreaMaps.MapPlace(g.Key, p.Name, new LatLng(p.Lat, p.Lng))))
+            .ToList();
     }
 
     /// <summary>The property's centre, for imagery. Null when the cadastre has no boundary.</summary>
@@ -282,8 +356,9 @@ public class PropertyReportService(
         // The included sales plus the near misses (marked), newest first: shows the filtering
         // was done, which is what lets an agent defend the range.
         Comparables: r.Comparables?.All
-            .Where(c => c.Included || c.Exclusion == ComparableExclusion.DissimilarSize)
+            .Where(c => c.Included || c.Reference || c.Exclusion == ComparableExclusion.DissimilarSize)
             .OrderByDescending(c => c.Included)
+            .ThenByDescending(c => c.Reference)
             .ThenByDescending(c => c.SaleDate)
             .Take(40)
             .Select(ToDto)
@@ -306,6 +381,11 @@ public class PropertyReportService(
         SitePlanUrl: $"/api/property/{r.Ref.Municipality}/{Uri.EscapeDataString(r.Ref.Erf)}/site-plan.svg" +
                      $"?suburb={Uri.EscapeDataString(r.Ref.Suburb)}" +
                      (r.Ref.Sg26 is null ? "" : $"&sg26={Uri.EscapeDataString(r.Ref.Sg26)}"),
+        AreaMapUrl: !string.Equals(r.Ref.Municipality, CapeTown, StringComparison.OrdinalIgnoreCase) || r.Location is null
+            ? null
+            : $"/api/property/{r.Ref.Municipality}/{Uri.EscapeDataString(r.Ref.Erf)}/area-map.svg" +
+              $"?suburb={Uri.EscapeDataString(r.Ref.Suburb)}" +
+              (r.Ref.Sg26 is null ? "" : $"&sg26={Uri.EscapeDataString(r.Ref.Sg26)}"),
         DataSource: r.DataSource,
         ComparablesMethod: MethodFor(r),
         CoverageNote: CoverageFor(r),
@@ -320,7 +400,7 @@ public class PropertyReportService(
         c.SaleDate.ToString("yyyy-MM-dd"), c.SalePriceZar, c.IndexedPriceZar,
         c.PricePerDwellingM2 is null ? null : Math.Round(c.PricePerDwellingM2.Value),
         c.Included, c.Included ? null : Describe(c.Exclusion),
-        c.DistanceM, c.Location?.Lat, c.Location?.Lng);
+        c.DistanceM, c.Location?.Lat, c.Location?.Lng, c.Reference);
 
     /// <summary>Sales that are a market price for one property (not R0, not a bulk deal).</summary>
     private static bool IsMarketSale(Comparable c) => c.Exclusion is not

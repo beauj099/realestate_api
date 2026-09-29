@@ -75,11 +75,11 @@ public class ComparablesController : ControllerBase
     /// </summary>
     [HttpGet("market")]
     public async Task<IActionResult> Market([FromQuery] string? suburb, [FromQuery] int? excludeListingId,
-        CancellationToken cancellationToken)
+        [FromQuery] double? lat, [FromQuery] double? lng, CancellationToken cancellationToken)
     {
         var userId = CurrentUserId();
         if (userId is null) return Unauthorized();
         if (string.IsNullOrWhiteSpace(suburb)) return Ok(Array.Empty<MarketListingDto>());
-        return Ok(await _comparables.MarketAsync(userId.Value, suburb, excludeListingId, cancellationToken));
+        return Ok(await _comparables.MarketAsync(userId.Value, suburb, excludeListingId, cancellationToken, lat, lng));
     }
 }

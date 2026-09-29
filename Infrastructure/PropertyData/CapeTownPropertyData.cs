@@ -129,6 +129,9 @@ namespace PropertyData.Core.Models
         public decimal? IndexedPriceZar { get; set; }
         public ComparableExclusion Exclusion { get; set; } = ComparableExclusion.None;
         public bool Included => Exclusion == ComparableExclusion.None;
+
+        /// <summary>Not used for the range, but listed so the report always shows enough sales.</summary>
+        public bool Reference { get; set; }
     }
 
     public sealed record ComparableSet(
@@ -262,6 +265,19 @@ namespace PropertyData.CapeTown.Internal
             }
             return Math.Abs(s / 2.0);
         }
+
+        /// <summary>
+        /// Addresses from a GPS point: the parcel the point is on first, then the parcels within
+        /// <paramref name="radiusM"/> nearest first (a phone's fix is often on the pavement or the
+        /// neighbour's side of the fence).
+        /// </summary>
+        public static List<T> NearestFirst<T>(IEnumerable<(T Item, Ring? Ring)> parcels, LatLng pt) =>
+            parcels
+                .Select(p => (p.Item, Inside: p.Ring is not null && Contains(p.Ring, pt),
+                    Metres: p.Ring is null ? double.MaxValue : DistanceM(Centroid(p.Ring), pt)))
+                .OrderByDescending(p => p.Inside).ThenBy(p => p.Metres)
+                .Select(p => p.Item)
+                .ToList();
 
         /// <summary>Great-circle distance in metres (haversine; plenty at neighbourhood scale).</summary>
         public static double DistanceM(LatLng a, LatLng b)
@@ -433,6 +449,19 @@ namespace PropertyData.CapeTown.Internal
                 typeAt < 0 ? null : string.Join(' ', tokens.Skip(typeAt + 1)));
         }
 
+        /// <summary>
+        /// The text as the start of a suburb name ("helder" → "HELDER"), or null when it cannot be
+        /// one: it starts with a street number, or is shorter than three letters.
+        /// </summary>
+        public static string? SuburbPrefix(string text)
+        {
+            var name = System.Text.RegularExpressions.Regex
+                .Replace(text.ToUpperInvariant(), @"[^A-Z ]", " ").Trim();
+            name = System.Text.RegularExpressions.Regex.Replace(name, @"\s+", " ");
+            if (name.Length < 3 || char.IsDigit(text.TrimStart().FirstOrDefault())) return null;
+            return name;
+        }
+
         /// <summary>"RD" → "ROAD"; null when the token is not a street type.</summary>
         public static string? CanonicalType(string token) => TypeSynonyms.GetValueOrDefault(token);
 
@@ -545,13 +574,62 @@ namespace PropertyData.CapeTown.Clients
     public sealed class CapeTownSpatialClient(ArcGisClient arc, ILogger<CapeTownSpatialClient> log)
     {
         private const string Hosted = "https://services6.arcgis.com/nyYfO9SxHU2ChQd9/arcgis/rest/services";
-        private const string Server = "https://esapqa.capetown.gov.za/agsext/rest/services";
+        // The City's production map server (the open data portal still links "esapqa", a test host).
+        private const string Server = "https://citymaps.capetown.gov.za/agsext/rest/services";
 
         public const string ParcelsLayer    = $"{Hosted}/Property/FeatureServer/0";
         public const string ZoningLayer     = $"{Hosted}/Zoning/FeatureServer/0";
         public const string SuburbValLayer  = $"{Hosted}/Valuations_Suburbs_for_2022_and_2025/FeatureServer/0";
         public const string PlanApprovals   = $"{Hosted}/Building_Plan_Approvals_2014_to_2025/FeatureServer/0";
         public const string FootprintsLayer = $"{Server}/Theme_Based/ODP_SPLIT_6/FeatureServer/2";
+        public const string RoadsLayer      = $"{Server}/Theme_Based/ODP_SPLIT_6/FeatureServer/8";
+
+        private static Dictionary<string, string> BoxQuery(LatLng sw, LatLng ne, string fields) => new()
+        {
+            ["geometry"] = string.Create(CultureInfo.InvariantCulture, $"{sw.Lng},{sw.Lat},{ne.Lng},{ne.Lat}"),
+            ["geometryType"] = "esriGeometryEnvelope",
+            ["inSR"] = "4326",
+            ["spatialRel"] = "esriSpatialRelIntersects",
+            ["outFields"] = fields,
+            ["returnGeometry"] = "true",
+            ["outSR"] = "4326",
+            ["geometryPrecision"] = "6",
+        };
+
+        /// <summary>Every parcel in a box, with its erf and street number, for the area map.</summary>
+        public async Task<List<(string? Erf, string? Number, Ring Ring)>> GetParcelsInBoxAsync(LatLng sw, LatLng ne,
+            CancellationToken ct = default)
+        {
+            var feats = await arc.QueryAsync(ParcelsLayer, BoxQuery(sw, ne, "PRTY_NMBR,ADR_NO,ADR_NO_SFX"), ct);
+            var list = new List<(string?, string?, Ring)>(feats.Count);
+            foreach (var f in feats)
+            {
+                if (ArcGisClient.ReadRing(f) is not { } ring) continue;
+                var at = f.GetProperty("attributes");
+                var no = ArcGisClient.Num(at, "ADR_NO");
+                list.Add((ErfKey(ArcGisClient.Str(at, "PRTY_NMBR")),
+                    no is null or 0 ? null : $"{(int)no.Value}{ArcGisClient.Str(at, "ADR_NO_SFX")}", ring));
+            }
+            return list;
+        }
+
+        /// <summary>Road centrelines in a box, with their names and widths, for the area map.</summary>
+        public async Task<List<(string Name, string? Type, double? WidthM, List<LatLng> Line)>> GetRoadsInBoxAsync(
+            LatLng sw, LatLng ne, CancellationToken ct = default)
+        {
+            var feats = await arc.QueryAsync(RoadsLayer, BoxQuery(sw, ne, "ROAD_NAME,ROAD_TYPE,RD_WIDTH"), ct);
+            var list = new List<(string, string?, double?, List<LatLng>)>();
+            foreach (var f in feats)
+            {
+                if (!f.TryGetProperty("geometry", out var g) || !g.TryGetProperty("paths", out var paths)) continue;
+                var at = f.GetProperty("attributes");
+                var name = ArcGisClient.Str(at, "ROAD_NAME") ?? "";
+                foreach (var path in paths.EnumerateArray())
+                    list.Add((name, ArcGisClient.Str(at, "ROAD_TYPE"), ArcGisClient.Num(at, "RD_WIDTH"),
+                        path.EnumerateArray().Select(p => new LatLng(p[1].GetDouble(), p[0].GetDouble())).ToList()));
+            }
+            return list;
+        }
 
         private const string ParcelFields =
             "PRTY_NMBR,SG26_CODE,ZONING,WARD_NAME,SUB_CNCL_NMBR,LU_LGL_STS_DSCR,OFC_SBRB_NAME,ALT_NAME,ADR_NO,ADR_NO_SFX,STR_NAME,LU_STR_NAME_TYPE";
@@ -680,6 +758,24 @@ namespace PropertyData.CapeTown.Clients
             return found;
         }
 
+        /// <summary>Official suburb names starting with the text ("helder" → HELDERVUE).</summary>
+        public async Task<List<string>> SuggestSuburbsAsync(string text, int limit = 3, CancellationToken ct = default)
+        {
+            var name = AddressNormalizer.SuburbPrefix(text);
+            if (name is null) return [];
+            var feats = await arc.QueryAsync(ParcelsLayer, new Dictionary<string, string>
+            {
+                ["where"] = $"OFC_SBRB_NAME LIKE '{AddressNormalizer.SqlLiteral(name)}%'",
+                ["outFields"] = "OFC_SBRB_NAME",
+                ["returnDistinctValues"] = "true",
+                ["returnGeometry"] = "false",
+                ["orderByFields"] = "OFC_SBRB_NAME",
+                ["resultRecordCount"] = limit.ToString(CultureInfo.InvariantCulture),
+            }, ct, singlePage: true);
+            return feats.Select(f => ArcGisClient.Str(f.GetProperty("attributes"), "OFC_SBRB_NAME"))
+                .OfType<string>().ToList();
+        }
+
         private async Task<List<AddressSuggestion>> SuggestOnceAsync(string text, int limit, CancellationToken ct)
         {
             if (AddressNormalizer.ParsePartial(text) is not { } typed) return [];
@@ -723,21 +819,48 @@ namespace PropertyData.CapeTown.Clients
                 ["resultRecordCount"] = limit.ToString(CultureInfo.InvariantCulture),
             }, ct, singlePage: true);
 
-            var list = feats.Select(f =>
-            {
-                var at = f.GetProperty("attributes");
-                var ring = ArcGisClient.ReadRing(f);
-                var sfx = ArcGisClient.Str(at, "ADR_NO_SFX");
-                return new AddressSuggestion(
-                    (int?)ArcGisClient.Num(at, "ADR_NO"), string.IsNullOrWhiteSpace(sfx) ? null : sfx,
-                    ArcGisClient.Str(at, "STR_NAME") ?? "", ArcGisClient.Str(at, "LU_STR_NAME_TYPE"),
-                    ArcGisClient.Str(at, "OFC_SBRB_NAME") ?? "",
-                    ArcGisClient.Str(at, "PRTY_NMBR"), ArcGisClient.Str(at, "SG26_CODE"),
-                    ring is null ? null : Geo.Centroid(ring));
-            });
+            var list = feats.Select(f => ToSuggestion(f, ArcGisClient.ReadRing(f)));
             // "17B": prefer the matching suffix, keep the rest after it.
             return suffix is null ? list.ToList()
                 : list.OrderByDescending(s => string.Equals(s.StreetNumberSuffix, suffix, StringComparison.OrdinalIgnoreCase)).ToList();
+        }
+
+        private static AddressSuggestion ToSuggestion(JsonElement f, Ring? ring)
+        {
+            var at = f.GetProperty("attributes");
+            var sfx = ArcGisClient.Str(at, "ADR_NO_SFX");
+            return new AddressSuggestion(
+                (int?)ArcGisClient.Num(at, "ADR_NO"), string.IsNullOrWhiteSpace(sfx) ? null : sfx,
+                ArcGisClient.Str(at, "STR_NAME") ?? "", ArcGisClient.Str(at, "LU_STR_NAME_TYPE"),
+                ArcGisClient.Str(at, "OFC_SBRB_NAME") ?? "",
+                ArcGisClient.Str(at, "PRTY_NMBR"), ArcGisClient.Str(at, "SG26_CODE"),
+                ring is null ? null : Geo.Centroid(ring));
+        }
+
+        /// <summary>
+        /// The City's address for a GPS point: the parcel it is on, then the nearest within
+        /// <paramref name="radiusM"/> — with the house number, street and official suburb.
+        /// </summary>
+        public async Task<List<AddressSuggestion>> AddressesAtAsync(LatLng pt, double radiusM = 30,
+            CancellationToken ct = default)
+        {
+            var feats = await arc.QueryAsync(ParcelsLayer, new Dictionary<string, string>
+            {
+                ["geometry"] = JsonSerializer.Serialize(new { x = pt.Lng, y = pt.Lat, spatialReference = new { wkid = 4326 } }),
+                ["geometryType"] = "esriGeometryPoint",
+                ["inSR"] = "4326",
+                ["distance"] = radiusM.ToString(CultureInfo.InvariantCulture),
+                ["units"] = "esriSRUnit_Meter",
+                ["spatialRel"] = "esriSpatialRelIntersects",
+                ["outFields"] = ParcelFields,
+                ["returnGeometry"] = "true",
+                ["outSR"] = "4326",
+            }, ct, singlePage: true);
+            return Geo.NearestFirst(feats.Select(f =>
+            {
+                var ring = ArcGisClient.ReadRing(f);
+                return (ToSuggestion(f, ring), ring);
+            }), pt);
         }
 
         public async Task<List<ParcelHit>> FindByErfAsync(string erf, string? suburb, CancellationToken ct = default)
@@ -1141,6 +1264,8 @@ namespace PropertyData.CapeTown.Services
         int MinIncluded = 3,
         // Nearest first: keep the comparables within the first radius that still leaves this many.
         int MinNearby = 6,
+        // Listed at least this many: the next most alike sales fill up, for reference only.
+        int MinShown = 10,
         // How value scales with size: price ∝ size^0.6 (double the size, ~1.5× the price).
         double SizeElasticity = 0.6)
     {
@@ -1229,6 +1354,21 @@ namespace PropertyData.CapeTown.Services
             foreach (var c in candidates.Where(c => !included.Contains(c)))
                 c.Exclusion = ComparableExclusion.DissimilarSize;
 
+            // 3. At least MinShown listed: the next most alike market sales (nearer ones first when
+            //    alike, older ones too), for reference. They do not move the range: a home half the
+            //    size says little about this one's value, but the agent and seller see the market.
+            foreach (var c in raw) c.Reference = false;
+            foreach (var c in raw
+                         .Where(c => c.Exclusion is ComparableExclusion.DissimilarSize
+                             or ComparableExclusion.TooFar or ComparableExclusion.TooOld)
+                         .OrderBy(c => SizeDistance(c, subjectDwelling, subjectErf))
+                         .ThenBy(c => c.DistanceM ?? double.MaxValue)
+                         .Take(Math.Max(0, r.MinShown - included.Count)))
+            {
+                c.Reference = true;
+                c.IndexedPriceZar ??= Index(c.SalePriceZar, c.SaleDate, reportDate, suburb);
+            }
+
             var perDwelling = Median(included.Where(c => c.DwellingExtentM2 > 0)
                                              .Select(c => (c.IndexedPriceZar ?? c.SalePriceZar) / (decimal)c.DwellingExtentM2));
             var perErf = Median(included.Where(c => c.ErfExtentM2 > 0)
@@ -1299,7 +1439,15 @@ namespace PropertyData.CapeTown.Services
         {
             var v = values.OrderBy(x => x).ToList();
             if (v.Count == 0) return (0, 0);
-            decimal At(double q) => v[Math.Clamp((int)Math.Round(q * (v.Count - 1)), 0, v.Count - 1)];
+            // Interpolated between neighbours: with seven sales, rounding to a position picked the
+            // 3rd and 5th values (R 3.98m - R 4.05m), a range far narrower than the sales.
+            decimal At(double q)
+            {
+                var pos = q * (v.Count - 1);
+                var lo = (int)Math.Floor(pos);
+                var hi = Math.Min(lo + 1, v.Count - 1);
+                return v[lo] + (v[hi] - v[lo]) * (decimal)(pos - lo);
+            }
             return (At(0.25), At(0.75));
         }
 

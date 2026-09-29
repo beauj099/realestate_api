@@ -76,6 +76,8 @@ public class AgentProfileService
             p.OfficeEmail = Keep(o.Email, p.OfficeEmail);
             p.OfficeWebsite = Keep(o.Website, p.OfficeWebsite);
             p.OfficeFooter = Keep(o.Footer, p.OfficeFooter);
+            p.OfficeSlogan = Keep(o.Slogan, p.OfficeSlogan);
+            p.OfficeHeadline = Keep(o.Headline, p.OfficeHeadline);
         }
         await _profiles.SaveAsync(p, cancellationToken);
         return ToDto(updated, p);
@@ -83,6 +85,25 @@ public class AgentProfileService
 
     public Task<AgentProfileDto?> SetPhotoAsync(int userId, ImageUpload image, CancellationToken ct) =>
         ReplaceImageAsync(userId, image, "photo", p => p.PhotoUrl, (p, url) => p.PhotoUrl = url, ct);
+
+    /// <summary>One of the office's logo variants (<see cref="OfficeLogosDto.Kinds"/>).</summary>
+    public Task<AgentProfileDto?> SetOfficeLogoAsync(int userId, string kind, ImageUpload image, CancellationToken ct) =>
+        ReplaceImageAsync(userId, image, "logo-" + kind,
+            p => OfficeLogosDto.Read(p.OfficeLogosJson)?.Get(kind),
+            (p, url) => p.OfficeLogosJson = OfficeLogosDto.With(p.OfficeLogosJson, kind, url), ct);
+
+    /// <summary>Removes one of the office's logos, so the agency's is used again.</summary>
+    public async Task<AgentProfileDto?> RemoveOfficeLogoAsync(int userId, string kind, CancellationToken ct)
+    {
+        var user = await _userRepository.GetByIdAsync(userId, ct);
+        if (user is null) return null;
+        var p = await _profiles.GetAsync(userId, ct) ?? new AgentProfile { UserId = userId };
+        var old = OfficeLogosDto.Read(p.OfficeLogosJson)?.Get(kind);
+        p.OfficeLogosJson = OfficeLogosDto.With(p.OfficeLogosJson, kind, null);
+        await _profiles.SaveAsync(p, ct);
+        await TryDeleteAsync(old, ct);
+        return ToDto(user, p);
+    }
 
     public Task<AgentProfileDto?> SetSignatureAsync(int userId, ImageUpload image, CancellationToken ct) =>
         ReplaceImageAsync(userId, image, "signature", p => p.SignatureUrl, (p, url) => p.SignatureUrl = url, ct);
@@ -197,7 +218,8 @@ public class AgentProfileService
             Website = p?.Website,
             PhotoUrl = p?.PhotoUrl,
             SignatureUrl = p?.SignatureUrl,
-            Office = new OfficeDto(p?.OfficeName, p?.OfficeAddress, p?.OfficePhone, p?.OfficeEmail, p?.OfficeWebsite, p?.OfficeFooter),
+            Office = new OfficeDto(p?.OfficeName, p?.OfficeAddress, p?.OfficePhone, p?.OfficeEmail, p?.OfficeWebsite, p?.OfficeFooter,
+                p?.OfficeSlogan, p?.OfficeHeadline, OfficeLogosDto.Read(p?.OfficeLogosJson)),
             BrochurePages = ReadPages(p?.BrochurePagesJson),
             ReportSettings = string.IsNullOrWhiteSpace(p?.ReportSettingsJson)
                 ? null

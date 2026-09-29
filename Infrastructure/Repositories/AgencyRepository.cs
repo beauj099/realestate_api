@@ -9,7 +9,8 @@ public class AgencyRepository
     private const string Columns =
         "Id, Slug, Name, Monogram, PrimaryColor, SecondaryColor, OnPrimaryColor, BannerColor, LogoUrl, " +
         "SortOrder, IsCustom, IsActive, CreatedByUserId, CreatedAt, UpdatedAt, " +
-        "OfficeName, OfficeAddress, OfficePhone, OfficeEmail, OfficeWebsite, OfficeFooter, BrochurePagesJson";
+        "OfficeName, OfficeAddress, OfficePhone, OfficeEmail, OfficeWebsite, OfficeFooter, BrochurePagesJson, " +
+        "OfficeSlogan, OfficeHeadline, OfficeLogosJson";
 
     private readonly DbConnectionFactory _connectionFactory;
 

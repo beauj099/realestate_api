@@ -31,22 +31,35 @@ public class PropertyReportController : ControllerBase
     }
 
     /// <summary>
-    /// Address type-ahead ("17 pine", "17 pine rd clar", "pine rd") from the City of Cape Town's
-    /// parcel records: up to 8 real addresses with their erf and location. The app debounces;
-    /// fewer than 3 characters returns nothing.
+    /// Address type-ahead ("bosm", "17 pine rd clar", "unit 5, 12 main") from the Cape Town and
+    /// Johannesburg parcel records: numbered addresses are real erfs with their location, plus
+    /// matching streets and suburbs. Fast; the app also asks <see cref="SuggestNational"/> and
+    /// merges the two. <paramref name="lat"/>/<paramref name="lng"/> (optional) favour nearby places.
     /// </summary>
     [HttpGet("suggest")]
-    public async Task<IActionResult> Suggest([FromQuery] string? q, CancellationToken cancellationToken)
-    {
-        try
-        {
-            return Ok(await _reports.SuggestAsync(q ?? "", cancellationToken));
-        }
-        catch (HttpRequestException)
-        {
-            return CityUnavailable();
-        }
-    }
+    public async Task<IActionResult> Suggest([FromQuery] string? q, [FromQuery] double? lat, [FromQuery] double? lng,
+        [FromServices] AddressSearchService search, CancellationToken cancellationToken) =>
+        Ok(await search.CityAsync(q ?? "", lat, lng, cancellationToken));
+
+    /// <summary>
+    /// The City's address at a GPS point (Cape Town, Johannesburg): the erf under the pin, then
+    /// its nearest neighbours, with the house number and the City's official suburb. Empty
+    /// elsewhere.
+    /// </summary>
+    [HttpGet("suggest/at")]
+    public async Task<IActionResult> SuggestAt([FromQuery] double lat, [FromQuery] double lng,
+        [FromServices] AddressSearchService search, CancellationToken cancellationToken) =>
+        Ok(await search.AtAsync(lat, lng, cancellationToken));
+
+    /// <summary>
+    /// The same search anywhere in South Africa, from OpenStreetMap (Photon): streets, numbered
+    /// houses where mapped, suburbs and towns. Slower (seconds); ranked on the same scale as
+    /// <see cref="Suggest"/>.
+    /// </summary>
+    [HttpGet("suggest/national")]
+    public async Task<IActionResult> SuggestNational([FromQuery] string? q, [FromQuery] double? lat, [FromQuery] double? lng,
+        [FromServices] AddressSearchService search, CancellationToken cancellationToken) =>
+        Ok(await search.NationalAsync(q ?? "", lat, lng, cancellationToken));
 
     /// <summary>Address, coordinate or erf → candidate properties (usually one).</summary>
     [HttpPost("resolve")]
@@ -104,6 +117,28 @@ public class PropertyReportController : ControllerBase
     }
 
     /// <summary>
+    /// The neighbourhood map (SVG, ours from City open data): <c>mode=area</c> the comparable
+    /// sales, numbered as in the report, in their radius; <c>mode=block</c> the property's block.
+    /// 404 outside Cape Town.
+    /// </summary>
+    [HttpGet("{municipality}/{erf}/area-map.svg")]
+    public async Task<IActionResult> GetAreaMap(string municipality, string erf, [FromQuery] string? suburb,
+        [FromQuery] string? sg26, [FromQuery] string mode = "area", [FromQuery] int width = 0, [FromQuery] int height = 0,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var svg = await _reports.GetAreaMapSvgAsync(municipality, erf, suburb, sg26,
+                string.Equals(mode, "block", StringComparison.OrdinalIgnoreCase), width, height, cancellationToken);
+            return svg is null ? NotFound() : Content(svg, "image/svg+xml", System.Text.Encoding.UTF8);
+        }
+        catch (HttpRequestException)
+        {
+            return CityUnavailable();
+        }
+    }
+
+    /// <summary>
     /// Area details for a point: climate, population and density, household income and crime,
     /// each from its own free public source and each left out when that source is down.
     /// </summary>
@@ -125,13 +160,14 @@ public class PropertyReportController : ControllerBase
     public async Task<IActionResult> GetForSale(string municipality, string erf, [FromQuery] string suburb,
         [FromQuery] string? township, [FromQuery] int? p24Suburb, [FromQuery] int? bedrooms,
         [FromQuery] double? floorM2, [FromQuery] double? erfM2, [FromQuery] int max = 3,
+        [FromQuery] double? lat = null, [FromQuery] double? lng = null, [FromQuery] decimal? priceZar = null,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(suburb)) return ValidationFailed("suburb", "The report's suburb is required.");
         try
         {
             return Ok(await _forSale.FindAsync(municipality, suburb, township, p24Suburb, bedrooms, floorM2, erfM2, max,
-                cancellationToken));
+                cancellationToken, lat, lng, priceZar));
         }
         catch (HttpRequestException)
         {

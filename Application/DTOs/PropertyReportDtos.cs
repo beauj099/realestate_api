@@ -6,8 +6,12 @@ namespace RealEstateApi.Application.DTOs;
 public record ResolvePropertyRequest(string? Address, double? Lat, double? Lng, string? Erf, string? Suburb);
 
 /// <summary>
-/// An address the agent can pick while typing. <see cref="Erf"/> and the location are set for a
-/// numbered address (a real erf); a bare street (no number yet) has neither.
+/// An address the agent can pick while typing, from City records or OpenStreetMap.
+/// <see cref="Kind"/>: "property" (a numbered erf from City records, with its erf and location),
+/// "address" (a numbered house from OpenStreetMap, with its location), "street" (the number,
+/// if one was typed, is the agent's and not on record) or "area" (a suburb or town).
+/// <see cref="Title"/> and <see cref="Subtitle"/> are the two lines to show; <see cref="Key"/>
+/// is the same for the same place from either source, so lists can be merged.
 /// </summary>
 public record AddressSuggestionDto(
     string Label,
@@ -21,7 +25,16 @@ public record AddressSuggestionDto(
     string? Sg26,
     double? Lat,
     double? Lng,
-    string Municipality);
+    string Municipality,
+    string Kind = "street",
+    string Title = "",
+    string Subtitle = "",
+    string? Unit = null,
+    bool NumberVerified = false,
+    string? PostalCode = null,
+    string Source = "",
+    double Rank = 0,
+    string Key = "");
 
 public record PropertyCandidateDto(string Municipality, string Erf, string? Sg26, string Suburb, string Township);
 
@@ -31,7 +44,9 @@ public record ComparableDto(
     string Address, string? Erf, double ErfExtentM2, double DwellingExtentM2,
     string SaleDate, decimal SalePriceZar, decimal? IndexedPriceZar,
     decimal? PricePerDwellingM2, bool Included, string? ExcludedBecause,
-    double? DistanceM = null, double? Lat = null, double? Lng = null);
+    double? DistanceM = null, double? Lat = null, double? Lng = null,
+    // Listed for reference to show at least ten sales; not used for the range.
+    bool Reference = false);
 
 /// <summary>A registered sale of the subject property itself.</summary>
 public record SaleRecordDto(string SaleDate, decimal PriceZar);
@@ -114,4 +129,6 @@ public record PropertyReportDto(
     SaleRecordDto? LastSale = null,
     // The latest sales in the subject's own street, newest first.
     IReadOnlyList<ComparableDto>? StreetSales = null,
-    AreaMarketDto? AreaMarket = null);
+    AreaMarketDto? AreaMarket = null,
+    // The neighbourhood map (SVG); add "&mode=block" for the close-up. Null where not drawn.
+    string? AreaMapUrl = null);

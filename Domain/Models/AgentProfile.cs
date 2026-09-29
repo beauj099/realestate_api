@@ -21,6 +21,10 @@ public class AgentProfile
     public string? OfficeEmail { get; set; }
     public string? OfficeWebsite { get; set; }
     public string? OfficeFooter { get; set; }
+    public string? OfficeSlogan { get; set; }
+    public string? OfficeHeadline { get; set; }
+    /// <summary>{"mark": url, "wide": url, "wideOnBrand": url}; see OfficeLogosDto.</summary>
+    public string? OfficeLogosJson { get; set; }
     public string? BrochurePagesJson { get; set; }
     public string? ReportSettingsJson { get; set; }
     public DateTime UpdatedAt { get; set; }

@@ -8,7 +8,8 @@ public record AddContactRequest(
     string? MobilePhone,
     string? EmailAddress,
     string? Role,
-    string? OwnerType
+    string? OwnerType,
+    string? Title = null
 );
 
 public record UpdateContactRequest(
@@ -19,7 +20,8 @@ public record UpdateContactRequest(
     string? MobilePhone,
     string? EmailAddress,
     string? Role,
-    string? OwnerType
+    string? OwnerType,
+    string? Title = null
 );
 
 public record ContactDto(
@@ -32,5 +34,6 @@ public record ContactDto(
     string? EmailAddress,
     string? Role,
     string? OwnerType,
-    int ListingId
+    int ListingId,
+    string? Title = null
 );

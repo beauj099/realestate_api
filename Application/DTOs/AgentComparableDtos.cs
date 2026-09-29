@@ -75,4 +75,5 @@ public record MarketListingDto(
     string? ListedOn,
     int DaysListed,
     bool DaysListedFromCapture,
-    bool IsArchived);
+    bool IsArchived,
+    double? DistanceM = null);

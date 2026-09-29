@@ -73,15 +73,36 @@ public class AgentComparableRepository
         return (id, false);
     }
 
-    /// <summary>Sales in a suburb since a date, newest first.</summary>
+    /// <summary>
+    /// Sales in a suburb since a date, newest first; with a location, also those captured within
+    /// about <paramref name="radiusM"/> of it whatever their suburb is called (names differ between
+    /// sources: the City's "Lynn's View" is Property24's "Steynsrust").
+    /// </summary>
     public async Task<IEnumerable<AgentComparable>> GetInAreaAsync(string municipality, string suburb, DateTime since,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, double? lat = null, double? lng = null, double radiusM = 1500)
     {
+        var box = NearBox(lat, lng, radiusM);
         using var connection = _connectionFactory.CreateConnection();
         return await connection.QueryAsync<AgentComparable>(new CommandDefinition(
-            $"SELECT {Columns} FROM AgentComparables WHERE Municipality = @Municipality AND Suburb = @Suburb " +
+            $"SELECT {Columns} FROM AgentComparables WHERE Municipality = @Municipality " +
+            "AND (Suburb = @Suburb OR (@LatMin IS NOT NULL AND Latitude BETWEEN @LatMin AND @LatMax " +
+            "AND Longitude BETWEEN @LngMin AND @LngMax)) " +
             "AND SaleDate >= @Since AND Verification <> 'Rejected' ORDER BY SaleDate DESC",
-            new { Municipality = municipality, Suburb = suburb, Since = since }, cancellationToken: cancellationToken));
+            new
+            {
+                Municipality = municipality, Suburb = suburb, Since = since,
+                box.LatMin, box.LatMax, box.LngMin, box.LngMax,
+            }, cancellationToken: cancellationToken));
+    }
+
+    /// <summary>A lat/lng box around a point (null bounds when there is no point).</summary>
+    public static (double? LatMin, double? LatMax, double? LngMin, double? LngMax) NearBox(double? lat, double? lng,
+        double radiusM)
+    {
+        if (lat is null || lng is null) return (null, null, null, null);
+        var dLat = radiusM / 111_320.0;
+        var dLng = radiusM / (111_320.0 * Math.Cos(lat.Value * Math.PI / 180));
+        return (lat - dLat, lat + dLat, lng - dLng, lng + dLng);
     }
 
     public async Task<IEnumerable<AgentComparable>> GetByUserAsync(int userId, CancellationToken cancellationToken = default)
@@ -120,25 +141,34 @@ public class AgentComparableRepository
     /// whose AgencyName matches the requesting agent's (or the agent's own when they have none).
     /// </summary>
     public async Task<IEnumerable<MarketListingRow>> GetAgencyListingsInSuburbAsync(int userId, string suburb,
-        int? excludeListingId, CancellationToken cancellationToken = default)
+        int? excludeListingId, CancellationToken cancellationToken = default, double? lat = null, double? lng = null,
+        double radiusM = 2000)
     {
+        var box = NearBox(lat, lng, radiusM);
         using var connection = _connectionFactory.CreateConnection();
         return await connection.QueryAsync<MarketListingRow>(new CommandDefinition(
             @"SELECT l.Id AS ListingId, a.StreetNumber, a.Street, a.Suburb, l.PropertyTypeId,
-                     v.AgentValuation, b.ErfSize, b.FloorArea, l.Status, l.ListDate, l.CreatedAt, l.ArchivedAt
+                     v.AgentValuation, b.ErfSize, b.FloorArea, l.Status, l.ListDate, l.CreatedAt, l.ArchivedAt,
+                     CAST(a.Latitude AS FLOAT) AS Latitude, CAST(a.Longitude AS FLOAT) AS Longitude
               FROM Listings l
               JOIN ListingAddress a ON a.ListingId = l.Id
               JOIN Users u ON u.Id = l.UserId
               LEFT JOIN ListingValuation v ON v.Id = l.ListingValuationId
               LEFT JOIN ListingBuildingInfo b ON b.ListingId = l.Id
-              WHERE UPPER(LTRIM(RTRIM(a.Suburb))) = UPPER(@Suburb)
+              WHERE (UPPER(LTRIM(RTRIM(a.Suburb))) = UPPER(@Suburb)
+                     OR (@LatMin IS NOT NULL AND a.Latitude BETWEEN @LatMin AND @LatMax
+                         AND a.Longitude BETWEEN @LngMin AND @LngMax))
                 AND (@ExcludeListingId IS NULL OR l.Id <> @ExcludeListingId)
                 AND (l.UserId = @UserId OR (
                       NULLIF(LTRIM(RTRIM(u.AgencyName)), '') IS NOT NULL
                       AND UPPER(LTRIM(RTRIM(u.AgencyName))) =
                           (SELECT UPPER(LTRIM(RTRIM(me.AgencyName))) FROM Users me WHERE me.Id = @UserId)))
               ORDER BY l.CreatedAt DESC",
-            new { UserId = userId, Suburb = suburb.Trim(), ExcludeListingId = excludeListingId },
+            new
+            {
+                UserId = userId, Suburb = suburb.Trim(), ExcludeListingId = excludeListingId,
+                box.LatMin, box.LatMax, box.LngMin, box.LngMax,
+            },
             cancellationToken: cancellationToken));
     }
 }
@@ -165,4 +195,6 @@ public class MarketListingRow
     public DateTime? ListDate { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? ArchivedAt { get; set; }
+    public double? Latitude { get; set; }
+    public double? Longitude { get; set; }
 }

@@ -83,6 +83,28 @@ public class AgentsController : ControllerBase
     public Task<IActionResult> SetPhoto(IFormFile? image, CancellationToken cancellationToken) =>
         WithImage(image, (userId, upload) => _profileService.SetPhotoAsync(userId, upload, cancellationToken));
 
+    /// <summary>
+    /// One of the office's logos for the report pack (multipart: <c>image</c>): <c>mark</c> (square),
+    /// <c>wide</c> (for a light background) or <c>wideOnBrand</c> (for the agency colour).
+    /// </summary>
+    [HttpPut("me/logos/{kind}")]
+    [RequestSizeLimit(MaxImageBytes + 64 * 1024)]
+    public Task<IActionResult> SetOfficeLogo(string kind, IFormFile? image, CancellationToken cancellationToken) =>
+        !OfficeLogosDto.Kinds.Contains(kind)
+            ? Task.FromResult<IActionResult>(ImageInvalid("Logo kind must be mark, wide or wideOnBrand."))
+            : WithImage(image, (userId, upload) => _profileService.SetOfficeLogoAsync(userId, kind, upload, cancellationToken));
+
+    /// <summary>Removes one of the office's logos (the agency's is used again).</summary>
+    [HttpDelete("me/logos/{kind}")]
+    public async Task<IActionResult> RemoveOfficeLogo(string kind, CancellationToken cancellationToken)
+    {
+        var userId = CurrentUserId();
+        if (userId is null) return Unauthorized();
+        if (!OfficeLogosDto.Kinds.Contains(kind)) return ImageInvalid("Logo kind must be mark, wide or wideOnBrand.");
+        var profile = await _profileService.RemoveOfficeLogoAsync(userId.Value, kind, cancellationToken);
+        return profile is null ? NotFound() : Ok(profile);
+    }
+
     /// <summary>The agent's signature for the valuation letter (multipart: <c>image</c>).</summary>
     [HttpPut("me/signature")]
     [RequestSizeLimit(MaxImageBytes + 64 * 1024)]

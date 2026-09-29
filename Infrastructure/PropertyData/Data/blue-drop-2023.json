@@ -1,0 +1,1072 @@
+{
+ "year": "2023",
+ "source": "Department of Water and Sanitation, 2023 Blue Drop Report (drinking-water quality and management, audit year 2021/22)",
+ "url": "https://ws.dws.gov.za/iris/releases/BDN_2023_Report.pdf",
+ "byMunicipalityCode": {
+  "EC101": {
+   "municipality": "Camdeboo Local Municipality",
+   "authority": "Dr Beyers Naude LM",
+   "score": 24.2
+  },
+  "EC104": {
+   "municipality": "Makana Local Municipality",
+   "authority": "Makana LM",
+   "score": 32.5
+  },
+  "EC105": {
+   "municipality": "Ndlambe Local Municipality",
+   "authority": "Ndlambe LM",
+   "score": 57.6
+  },
+  "EC121": {
+   "municipality": "Mbhashe Local Municipality",
+   "authority": "Amatole DM",
+   "score": 59.5
+  },
+  "EC122": {
+   "municipality": "Mnquma Local Municipality",
+   "authority": "Amatole DM",
+   "score": 59.5
+  },
+  "EC131": {
+   "municipality": "Inxuba Yethemba Local Municipality",
+   "authority": "Chris Hani DM",
+   "score": 45.3
+  },
+  "EC137": {
+   "municipality": "Engcobo Local Municipality",
+   "authority": "Chris Hani DM",
+   "score": 45.3
+  },
+  "EC141": {
+   "municipality": "Elundini Local Municipality",
+   "authority": "Joe Gqabi DM",
+   "score": 56.0
+  },
+  "EC142": {
+   "municipality": "Senqu Local Municipality",
+   "authority": "Joe Gqabi DM",
+   "score": 56.0
+  },
+  "EC153": {
+   "municipality": "Ngquza Hill Local Municipality",
+   "authority": "OR Tambo DM",
+   "score": 56.7
+  },
+  "EC154": {
+   "municipality": "Port St Johns Local Municipality",
+   "authority": "OR Tambo DM",
+   "score": 56.7
+  },
+  "EC155": {
+   "municipality": "Nyandeni Local Municipality",
+   "authority": "OR Tambo DM",
+   "score": 56.7
+  },
+  "EC156": {
+   "municipality": "Mhlontlo Local Municipality",
+   "authority": "OR Tambo DM",
+   "score": 56.7
+  },
+  "EC157": {
+   "municipality": "King Sabata Dalindyebo Local Municipality",
+   "authority": "OR Tambo DM",
+   "score": 56.7
+  },
+  "EC441": {
+   "municipality": "Matatiele Local Municipality",
+   "authority": "Alfred Nzo DM",
+   "score": 54.8
+  },
+  "FS161": {
+   "municipality": "Letsemeng Local Municipality",
+   "authority": "Letsemeng LM",
+   "score": 32.9
+  },
+  "FS162": {
+   "municipality": "Kopanong Local Municipality",
+   "authority": "Kopanong LM",
+   "score": 57.9
+  },
+  "FS163": {
+   "municipality": "Mohokare Local Municipality",
+   "authority": "Mohokare LM",
+   "score": 27.6
+  },
+  "FS181": {
+   "municipality": "Masilonyana Local Municipality",
+   "authority": "Masilonyana LM",
+   "score": 25.5
+  },
+  "FS182": {
+   "municipality": "Tokologo Local Municipality",
+   "authority": "Tokologo LM",
+   "score": 24.8
+  },
+  "FS183": {
+   "municipality": "Tswelopele Local Municipality",
+   "authority": "Tswelopele LM",
+   "score": 73.8
+  },
+  "FS184": {
+   "municipality": "Matjhabeng Local Municipality",
+   "authority": "Matjhabeng LM",
+   "score": 55.6
+  },
+  "FS185": {
+   "municipality": "Nala Local Municipality",
+   "authority": "Nala LM",
+   "score": 52.3
+  },
+  "FS191": {
+   "municipality": "Setsoto Local Municipality",
+   "authority": "Setsoto LM",
+   "score": 43.3
+  },
+  "FS192": {
+   "municipality": "Dihlabeng Local Municipality",
+   "authority": "Dihlabeng LM",
+   "score": 76.6
+  },
+  "FS193": {
+   "municipality": "Nketoana Local Municipality",
+   "authority": "Nketoana LM",
+   "score": 45.6
+  },
+  "FS194": {
+   "municipality": "Maluti a Phofung Local Municipality",
+   "authority": "Maluti-a-Phofung LM",
+   "score": 17.7
+  },
+  "FS195": {
+   "municipality": "Phumelela Local Municipality",
+   "authority": "Phumelela LM",
+   "score": 41.3
+  },
+  "FS196": {
+   "municipality": "Mantsopa Local Municipality",
+   "authority": "Mantsopa LM",
+   "score": 42.3
+  },
+  "FS201": {
+   "municipality": "Moqhaka Local Municipality",
+   "authority": "Moqhaka LM",
+   "score": 36.1
+  },
+  "FS203": {
+   "municipality": "Ngwathe Local Municipality",
+   "authority": "Ngwathe LM",
+   "score": 36.2
+  },
+  "FS204": {
+   "municipality": "Metsimaholo Local Municipality",
+   "authority": "Metsimaholo LM",
+   "score": 84.2
+  },
+  "FS205": {
+   "municipality": "Mafube Local Municipality",
+   "authority": "Mafube LM",
+   "score": 4.3
+  },
+  "GT481": {
+   "municipality": "Mogale City Local Municipality",
+   "authority": "Mogale City LM",
+   "score": 93.1
+  },
+  "GT485": {
+   "municipality": "New Local Municipality",
+   "authority": "Rand West LM",
+   "score": 87.2
+  },
+  "GT484": {
+   "municipality": "Merafong City Local Municipality",
+   "authority": "Merafong LM",
+   "score": 93.2
+  },
+  "TSH": {
+   "municipality": "City of Tshwane Metropolitan Municipality",
+   "authority": "City of Tshwane",
+   "score": 88.2
+  },
+  "KZN212": {
+   "municipality": "Umdoni Local Municipality",
+   "authority": "Ugu DM",
+   "score": 57.14
+  },
+  "KZN214": {
+   "municipality": "UMuziwabantu Local Municipality",
+   "authority": "Ugu DM",
+   "score": 57.14
+  },
+  "KZN216": {
+   "municipality": "Hibiscus Coast Local Municipality",
+   "authority": "Ugu DM",
+   "score": 57.14
+  },
+  "KZN238": {
+   "municipality": "New Local Municipality",
+   "authority": "uThukela DM",
+   "score": 50.42
+  },
+  "KZN237": {
+   "municipality": "New Local Municipality",
+   "authority": "uThukela DM",
+   "score": 50.42
+  },
+  "KZN235": {
+   "municipality": "Okhahlamba Local Municipality",
+   "authority": "uThukela DM",
+   "score": 50.42
+  },
+  "KZN241": {
+   "municipality": "Endumeni Local Municipality",
+   "authority": "Umzinyathi DM",
+   "score": 31.59
+  },
+  "KZN242": {
+   "municipality": "Nqutu Local Municipality",
+   "authority": "Umzinyathi DM",
+   "score": 31.59
+  },
+  "KZN252": {
+   "municipality": "Newcastle Local Municipality",
+   "authority": "Newcastle LM",
+   "score": 84.35
+  },
+  "KZN253": {
+   "municipality": "Emadlangeni Local Municipality",
+   "authority": "Amajuba DM",
+   "score": 44.4
+  },
+  "KZN254": {
+   "municipality": "Dannhauser Local Municipality",
+   "authority": "Amajuba DM",
+   "score": 44.4
+  },
+  "KZN261": {
+   "municipality": "eDumbe Local Municipality",
+   "authority": "Zululand DM",
+   "score": 43.93
+  },
+  "KZN262": {
+   "municipality": "UPhongolo Local Municipality",
+   "authority": "Zululand DM",
+   "score": 43.93
+  },
+  "KZN263": {
+   "municipality": "Abaqulusi Local Municipality",
+   "authority": "Zululand DM",
+   "score": 43.93
+  },
+  "KZN265": {
+   "municipality": "Nongoma Local Municipality",
+   "authority": "Zululand DM",
+   "score": 43.93
+  },
+  "KZN266": {
+   "municipality": "Ulundi Local Municipality",
+   "authority": "Zululand DM",
+   "score": 43.93
+  },
+  "KZN271": {
+   "municipality": "Umhlabuyalingana Local Municipality",
+   "authority": "Umkhanyakude DM",
+   "score": 74.32
+  },
+  "KZN272": {
+   "municipality": "Jozini Local Municipality",
+   "authority": "Umkhanyakude DM",
+   "score": 74.32
+  },
+  "KZN275": {
+   "municipality": "Mtubatuba Local Municipality",
+   "authority": "Umkhanyakude DM",
+   "score": 74.32
+  },
+  "KZN284": {
+   "municipality": "uMlalazi Local Municipality",
+   "authority": "King Cetshwayo DM",
+   "score": 40.7
+  },
+  "KZN286": {
+   "municipality": "Nkandla Local Municipality",
+   "authority": "King Cetshwayo DM",
+   "score": 40.7
+  },
+  "KZN291": {
+   "municipality": "Mandeni Local Municipality",
+   "authority": "iLembe DM",
+   "score": 87.09
+  },
+  "KZN292": {
+   "municipality": "KwaDukuza Local Municipality",
+   "authority": "iLembe DM",
+   "score": 87.09
+  },
+  "KZN293": {
+   "municipality": "Ndwedwe Local Municipality",
+   "authority": "iLembe DM",
+   "score": 87.09
+  },
+  "KZN294": {
+   "municipality": "Maphumulo Local Municipality",
+   "authority": "iLembe DM",
+   "score": 87.09
+  },
+  "KZN436": {
+   "municipality": "New Local Municipality",
+   "authority": "Harry Gwala DM",
+   "score": 66.18
+  },
+  "KZN434": {
+   "municipality": "Ubuhlebezwe Local Municipality",
+   "authority": "Harry Gwala DM",
+   "score": 66.18
+  },
+  "LIM331": {
+   "municipality": "Greater Giyani Local Municipality",
+   "authority": "Mopani DM",
+   "score": 56.1
+  },
+  "LIM332": {
+   "municipality": "Greater Letaba Local Municipality",
+   "authority": "Mopani DM",
+   "score": 56.1
+  },
+  "LIM333": {
+   "municipality": "Greater Tzaneen Local Municipality",
+   "authority": "Mopani DM",
+   "score": 56.1
+  },
+  "LIM334": {
+   "municipality": "Ba-Phalaborwa Local Municipality",
+   "authority": "Mopani DM",
+   "score": 56.1
+  },
+  "LIM335": {
+   "municipality": "Maruleng Local Municipality",
+   "authority": "Mopani DM",
+   "score": 56.1
+  },
+  "LIM355": {
+   "municipality": "Lepele-Nkumpi Local Municipality",
+   "authority": "Capricorn DM",
+   "score": 38.1
+  },
+  "LIM361": {
+   "municipality": "Thabazimbi Local Municipality",
+   "authority": "Thabazimbi LM",
+   "score": 47.5
+  },
+  "LIM362": {
+   "municipality": "Lephalale Local Municipality",
+   "authority": "Lephalale LM",
+   "score": 48.4
+  },
+  "LIM366": {
+   "municipality": "Bela-Bela Local Municipality",
+   "authority": "Bela-Bela LM",
+   "score": 60.3
+  },
+  "LIM367": {
+   "municipality": "Mogalakwena Local Municipality",
+   "authority": "Mogalakwena LM",
+   "score": 40.9
+  },
+  "LIM471": {
+   "municipality": "Ephraim Mogale Local Municipality",
+   "authority": "Greater Sekhukhune DM",
+   "score": 39.6
+  },
+  "LIM472": {
+   "municipality": "Elias Motsoaledi Local Municipality",
+   "authority": "Greater Sekhukhune DM",
+   "score": 39.6
+  },
+  "LIM473": {
+   "municipality": "Makhuduthamaga Local Municipality",
+   "authority": "Greater Sekhukhune DM",
+   "score": 39.6
+  },
+  "MP301": {
+   "municipality": "Chief Albert Luthuli Local Municipality",
+   "authority": "Albert Luthuli LM",
+   "score": 19.1
+  },
+  "MP302": {
+   "municipality": "Msukaligwa Local Municipality",
+   "authority": "Msukaligwa LM",
+   "score": 21.6
+  },
+  "MP303": {
+   "municipality": "Mkhondo Local Municipality",
+   "authority": "Mkhondo LM",
+   "score": 54.5
+  },
+  "MP304": {
+   "municipality": "Dr Pixley Ka Isaka Seme Local Municipality",
+   "authority": "Pixley Ka Seme LM",
+   "score": 45.0
+  },
+  "MP305": {
+   "municipality": "Lekwa Local Municipality",
+   "authority": "Lekwa LM",
+   "score": 33.5
+  },
+  "MP306": {
+   "municipality": "Dipaleseng Local Municipality",
+   "authority": "Dipaleseng LM",
+   "score": 7.0
+  },
+  "MP307": {
+   "municipality": "Govan Mbeki Local Municipality",
+   "authority": "Govan Mbeki LM",
+   "score": 90.8
+  },
+  "MP311": {
+   "municipality": "Victor Khanye Local Municipality",
+   "authority": "Victor Khanye LM",
+   "score": 90.1
+  },
+  "MP312": {
+   "municipality": "Emalahleni Local Municipality",
+   "authority": "Emalahleni LM",
+   "score": 65.7
+  },
+  "MP313": {
+   "municipality": "Steve Tshwete Local Municipality",
+   "authority": "Steve Tshwete LM",
+   "score": 67.4
+  },
+  "MP314": {
+   "municipality": "Emakhazeni Local Municipality",
+   "authority": "Emakhazeni LM",
+   "score": 31.2
+  },
+  "MP315": {
+   "municipality": "Thembisile Local Municipality",
+   "authority": "Thembisile LM",
+   "score": 75.3
+  },
+  "MP316": {
+   "municipality": "Dr JS Moroka Local Municipality",
+   "authority": "Dr JS Moroka LM",
+   "score": 53.4
+  },
+  "MP321": {
+   "municipality": "Thaba Chweu Local Municipality",
+   "authority": "Thaba Chweu LM",
+   "score": 8.2
+  },
+  "MP324": {
+   "municipality": "Nkomazi Local Municipality",
+   "authority": "Nkomazi LM",
+   "score": 68.6
+  },
+  "NW371": {
+   "municipality": "Moretele Local Municipality",
+   "authority": "Moretele LM",
+   "score": 37.5
+  },
+  "NW372": {
+   "municipality": "Local Municipality of Madibeng",
+   "authority": "Madibeng LM",
+   "score": 50.64
+  },
+  "NW373": {
+   "municipality": "Rustenburg Local Municipality",
+   "authority": "Rustenburg LM",
+   "score": 78.31
+  },
+  "NW374": {
+   "municipality": "Kgetlengrivier Local Municipality",
+   "authority": "Kgetlengrivier LM",
+   "score": 21.6
+  },
+  "NW375": {
+   "municipality": "Moses Kotane Local Municipality",
+   "authority": "Moses Kotane LM",
+   "score": 69.25
+  },
+  "NW381": {
+   "municipality": "Ratlou Local Municipality",
+   "authority": "Ngaka Modiri Molema DM",
+   "score": 36.74
+  },
+  "NW382": {
+   "municipality": "Tswaing Local Municipality",
+   "authority": "Ngaka Modiri Molema DM",
+   "score": 36.74
+  },
+  "NW383": {
+   "municipality": "Mafikeng Local Municipality",
+   "authority": "Ngaka Modiri Molema DM",
+   "score": 36.74
+  },
+  "NW384": {
+   "municipality": "Ditsobotla Local Municipality",
+   "authority": "Ngaka Modiri Molema DM",
+   "score": 36.74
+  },
+  "NW385": {
+   "municipality": "Ramotshere Moiloa Local Municipality",
+   "authority": "Ngaka Modiri Molema DM",
+   "score": 36.74
+  },
+  "NW392": {
+   "municipality": "Naledi Local Municipality",
+   "authority": "Dr. Ruth S Mompati DM",
+   "score": 31.47
+  },
+  "NW393": {
+   "municipality": "Mamusa Local Municipality",
+   "authority": "Dr. Ruth S Mompati DM",
+   "score": 31.47
+  },
+  "NW394": {
+   "municipality": "Greater Taung Local Municipality",
+   "authority": "Dr. Ruth S Mompati DM",
+   "score": 31.47
+  },
+  "NW396": {
+   "municipality": "Lekwa-Teemane Local Municipality",
+   "authority": "Dr. Ruth S Mompati DM",
+   "score": 31.47
+  },
+  "NW397": {
+   "municipality": "Kagisano/Molopo Local Municipality",
+   "authority": "Dr. Ruth S Mompati DM",
+   "score": 31.47
+  },
+  "NW403": {
+   "municipality": "City of Matlosana Local Municipality",
+   "authority": "Matlosana LM",
+   "score": 87.82
+  },
+  "NW404": {
+   "municipality": "Maquassi Hills Local Municipality",
+   "authority": "Maquassi Hills LM",
+   "score": 47.85
+  },
+  "NC061": {
+   "municipality": "Richtersveld Local Municipality",
+   "authority": "Richtersveld LM",
+   "score": 21.94
+  },
+  "NC062": {
+   "municipality": "Nama Khoi Local Municipality",
+   "authority": "Nama Khoi LM",
+   "score": 36.61
+  },
+  "NC064": {
+   "municipality": "Kamiesberg Local Municipality",
+   "authority": "Kamiesberg LM",
+   "score": 8.02
+  },
+  "NC065": {
+   "municipality": "Hantam Local Municipality",
+   "authority": "Hantam LM",
+   "score": 47.64
+  },
+  "NC066": {
+   "municipality": "Karoo Hoogland Local Municipality",
+   "authority": "Karoo Hoogland LM",
+   "score": 21.62
+  },
+  "NC067": {
+   "municipality": "Khâi-Ma Local Municipality",
+   "authority": "Khai-Ma LM",
+   "score": 15.19
+  },
+  "NC071": {
+   "municipality": "Ubuntu Local Municipality",
+   "authority": "Ubuntu LM",
+   "score": 14.17
+  },
+  "NC072": {
+   "municipality": "Umsobomvu Local Municipality",
+   "authority": "Umsobomvu LM",
+   "score": 24.17
+  },
+  "NC073": {
+   "municipality": "Emthanjeni Local Municipality",
+   "authority": "Emthanjeni LM",
+   "score": 11.94
+  },
+  "NC074": {
+   "municipality": "Kareeberg Local Municipality",
+   "authority": "Kareeberg LM",
+   "score": 18.42
+  },
+  "NC075": {
+   "municipality": "Renosterberg Local Municipality",
+   "authority": "Renosterberg LM",
+   "score": 9.2
+  },
+  "NC076": {
+   "municipality": "Thembelihle Local Municipality",
+   "authority": "Thembelihle LM",
+   "score": 59.52
+  },
+  "NC077": {
+   "municipality": "Siyathemba Local Municipality",
+   "authority": "Siyathemba LM",
+   "score": 46.26
+  },
+  "NC078": {
+   "municipality": "Siyancuma Local Municipality",
+   "authority": "Siyancuma LM",
+   "score": 26.38
+  },
+  "NC082": {
+   "municipality": "Kai !Garib Local Municipality",
+   "authority": "!Kai! Garib LM",
+   "score": 16.2
+  },
+  "NC084": {
+   "municipality": "!Kheis Local Municipality",
+   "authority": "!Kheis LM",
+   "score": 29.31
+  },
+  "NC085": {
+   "municipality": "Tsantsabane Local Municipality",
+   "authority": "Tsantsabane LM",
+   "score": 56.0
+  },
+  "NC086": {
+   "municipality": "Kgatelopele Local Municipality",
+   "authority": "Kgatelopele LM",
+   "score": 27.6
+  },
+  "NC091": {
+   "municipality": "Sol Plaatjie Local Municipality",
+   "authority": "Sol Plaatjie LM",
+   "score": 52.04
+  },
+  "NC092": {
+   "municipality": "Dikgatlong Local Municipality",
+   "authority": "Dikgatlong LM",
+   "score": 18.73
+  },
+  "NC453": {
+   "municipality": "Gamagara Local Municipality",
+   "authority": "Gamagara LM",
+   "score": 54.71
+  },
+  "WC011": {
+   "municipality": "Matzikama Local Municipality",
+   "authority": "Matzikama LM",
+   "score": 55.2
+  },
+  "WC012": {
+   "municipality": "Cederberg Local Municipality",
+   "authority": "Cederberg LM",
+   "score": 35.9
+  },
+  "WC013": {
+   "municipality": "Bergrivier Local Municipality",
+   "authority": "Bergrivier LM",
+   "score": 85.1
+  },
+  "WC022": {
+   "municipality": "Witzenberg Local Municipality",
+   "authority": "Witzenberg LM",
+   "score": 81.0
+  },
+  "WC023": {
+   "municipality": "Drakenstein Local Municipality",
+   "authority": "Drakenstein LM",
+   "score": 94.1
+  },
+  "WC025": {
+   "municipality": "Breede Valley Local Municipality",
+   "authority": "Breede Valley LM",
+   "score": 60.0
+  },
+  "WC026": {
+   "municipality": "Langeberg Local Municipality",
+   "authority": "Langeberg LM",
+   "score": 44.7
+  },
+  "WC033": {
+   "municipality": "Cape Agulhas Local Municipality",
+   "authority": "Cape Agulhas LM",
+   "score": 90.0
+  },
+  "WC034": {
+   "municipality": "Swellendam Local Municipality",
+   "authority": "Swellendam LM",
+   "score": 58.6
+  },
+  "WC041": {
+   "municipality": "Kannaland Local Municipality",
+   "authority": "Kannaland LM",
+   "score": 25.8
+  },
+  "WC042": {
+   "municipality": "Hessequa Local Municipality",
+   "authority": "Hessequa LM",
+   "score": 50.1
+  },
+  "WC043": {
+   "municipality": "Mossel Bay Local Municipality",
+   "authority": "Mossel Bay LM",
+   "score": 87.4
+  },
+  "WC044": {
+   "municipality": "George Local Municipality",
+   "authority": "George LM",
+   "score": 94.95
+  },
+  "WC045": {
+   "municipality": "Oudtshoorn Local Municipality",
+   "authority": "Oudtshoorn LM",
+   "score": 63.9
+  },
+  "WC047": {
+   "municipality": "Bitou Local Municipality",
+   "authority": "Bitou LM",
+   "score": 81.7
+  },
+  "WC048": {
+   "municipality": "Knysna Local Municipality",
+   "authority": "Knysna LM",
+   "score": 78.9
+  },
+  "WC051": {
+   "municipality": "Laingsburg Local Municipality",
+   "authority": "Laingsburg LM",
+   "score": 47.8
+  },
+  "WC052": {
+   "municipality": "Prince Albert Local Municipality",
+   "authority": "Prince Albert LM",
+   "score": 28.2
+  },
+  "WC053": {
+   "municipality": "Beaufort West Local Municipality",
+   "authority": "Beaufort West LM",
+   "score": 53.0
+  },
+  "NC451": {
+   "municipality": "Joe Morolong Local Municipality",
+   "authority": "Joe Morolong LM",
+   "score": 17.57
+  },
+  "NC452": {
+   "municipality": "Ga-Segonyana Local Municipality",
+   "authority": "Ga-Segonyana LM",
+   "score": 25.92
+  },
+  "KZN213": {
+   "municipality": "Umzumbe Local Municipality",
+   "authority": "Ugu DM",
+   "score": 57.14
+  },
+  "KZN276": {
+   "municipality": "New Local Municipality",
+   "authority": "Umkhanyakude DM",
+   "score": 74.32
+  },
+  "KZN227": {
+   "municipality": "Richmond Local Municipality",
+   "authority": "uMgungundlovu DM",
+   "score": 96.44
+  },
+  "KZN433": {
+   "municipality": "Greater Kokstad Local Municipality",
+   "authority": "Harry Gwala DM",
+   "score": 66.18
+  },
+  "KZN435": {
+   "municipality": "Umzimkhulu Local Municipality",
+   "authority": "Harry Gwala DM",
+   "score": 66.18
+  },
+  "NC093": {
+   "municipality": "Magareng Local Municipality",
+   "authority": "Magareng LM",
+   "score": 26.45
+  },
+  "NC094": {
+   "municipality": "Phokwane Local Municipality",
+   "authority": "Phokwane LM",
+   "score": 19.85
+  },
+  "WC024": {
+   "municipality": "Stellenbosch Local Municipality",
+   "authority": "Stellenbosch LM",
+   "score": 69.9
+  },
+  "WC031": {
+   "municipality": "Theewaterskloof Local Municipality",
+   "authority": "Theewaterskloof LM",
+   "score": 89.6
+  },
+  "EC442": {
+   "municipality": "Umzimvubu Local Municipality",
+   "authority": "Alfred Nzo DM",
+   "score": 54.8
+  },
+  "EC444": {
+   "municipality": "Ntabankulu Local Municipality",
+   "authority": "Alfred Nzo DM",
+   "score": 54.8
+  },
+  "EC443": {
+   "municipality": "Mbizana Local Municipality",
+   "authority": "Alfred Nzo DM",
+   "score": 54.8
+  },
+  "EC123": {
+   "municipality": "Great Kei Local Municipality",
+   "authority": "Amatole DM",
+   "score": 59.5
+  },
+  "EC124": {
+   "municipality": "Amahlathi Local Municipality",
+   "authority": "Amatole DM",
+   "score": 59.5
+  },
+  "KZN221": {
+   "municipality": "uMshwathi Local Municipality",
+   "authority": "uMgungundlovu DM",
+   "score": 96.44
+  },
+  "KZN244": {
+   "municipality": "Msinga Local Municipality",
+   "authority": "Umzinyathi DM",
+   "score": 31.59
+  },
+  "ETH": {
+   "municipality": "Ethekwini Metropolitan Municipality",
+   "authority": "eThekwini MM",
+   "score": 94.95
+  },
+  "KZN226": {
+   "municipality": "Mkhambathini Local Municipality",
+   "authority": "uMgungundlovu DM",
+   "score": 96.44
+  },
+  "KZN225": {
+   "municipality": "The Msunduzi Local Municipality",
+   "authority": "Msunduzi LM",
+   "score": 97.94
+  },
+  "KZN222": {
+   "municipality": "uMngeni Local Municipality",
+   "authority": "uMgungundlovu DM",
+   "score": 96.44
+  },
+  "KZN224": {
+   "municipality": "Impendle Local Municipality",
+   "authority": "uMgungundlovu DM",
+   "score": 96.44
+  },
+  "KZN281": {
+   "municipality": "Mfolozi Local Municipality",
+   "authority": "King Cetshwayo DM",
+   "score": 40.7
+  },
+  "KZN282": {
+   "municipality": "uMhlathuze Local Municipality",
+   "authority": "uMhlathuze LM",
+   "score": 83.7
+  },
+  "KZN285": {
+   "municipality": "Mthonjaneni Local Municipality",
+   "authority": "King Cetshwayo DM",
+   "score": 40.7
+  },
+  "EC106": {
+   "municipality": "Sundays River Valley Local Municipality",
+   "authority": "Sundays River Valley LM",
+   "score": 25.6
+  },
+  "EC108": {
+   "municipality": "Kouga Local Municipality",
+   "authority": "Kouga LM",
+   "score": 64.6
+  },
+  "EC109": {
+   "municipality": "Kou-Kamma Local Municipality",
+   "authority": "Koukamma LM",
+   "score": 24.1
+  },
+  "NMA": {
+   "municipality": "Nelson Mandela Bay Metropolitan Municipality",
+   "authority": "Nelson Mandela MM",
+   "score": 85.0
+  },
+  "BUF": {
+   "municipality": "Buffalo City Metropolitan Municipality",
+   "authority": "Buffalo City LM",
+   "score": 83.5
+  },
+  "EC126": {
+   "municipality": "Ngqushwa Local Municipality",
+   "authority": "Amatole DM",
+   "score": 59.5
+  },
+  "MP325": {
+   "municipality": "Bushbuckridge Local Municipality",
+   "authority": "Bushbuckridge LM",
+   "score": 62.2
+  },
+  "EC135": {
+   "municipality": "Intsika Yethu Local Municipality",
+   "authority": "Chris Hani DM",
+   "score": 45.3
+  },
+  "EC136": {
+   "municipality": "Emalahleni Local Municipality",
+   "authority": "Emalahleni LM",
+   "score": 65.7
+  },
+  "EC138": {
+   "municipality": "Sakhisizwe Local Municipality",
+   "authority": "Chris Hani DM",
+   "score": 45.3
+  },
+  "WC014": {
+   "municipality": "Saldanha Bay Local Municipality",
+   "authority": "Saldanha Bay LM",
+   "score": 94.6
+  },
+  "WC015": {
+   "municipality": "Swartland Local Municipality",
+   "authority": "Swartland LM",
+   "score": 93.8
+  },
+  "WC032": {
+   "municipality": "Overstrand Local Municipality",
+   "authority": "Overstrand LM",
+   "score": 99.99
+  },
+  "CPT": {
+   "municipality": "City of Cape Town Metropolitan Municipality",
+   "authority": "City of Cape Town MM",
+   "score": 98.1
+  },
+  "LIM351": {
+   "municipality": "Blouberg Local Municipality",
+   "authority": "Capricorn DM",
+   "score": 38.1
+  },
+  "LIM353": {
+   "municipality": "Molemole Local Municipality",
+   "authority": "Capricorn DM",
+   "score": 38.1
+  },
+  "LIM354": {
+   "municipality": "Polokwane Local Municipality",
+   "authority": "Polokwane LM",
+   "score": 56.2
+  },
+  "LIM368": {
+   "municipality": "Modimolle/Mookgophong Local Municipality",
+   "authority": "Modimolle/Mookgophong LM",
+   "score": 51.1
+  },
+  "LIM476": {
+   "municipality": "Greater Tubatse/Fetakgomo Local Municipality",
+   "authority": "Greater Sekhukhune DM",
+   "score": 39.6
+  },
+  "LIM341": {
+   "municipality": "Musina Local Municipality",
+   "authority": "Vhembe DM",
+   "score": 63.8
+  },
+  "LIM343": {
+   "municipality": "Thulamela Local Municipality",
+   "authority": "Vhembe DM",
+   "score": 63.8
+  },
+  "LIM344": {
+   "municipality": "Makhado Local Municipality",
+   "authority": "Vhembe DM",
+   "score": 63.8
+  },
+  "LIM345": {
+   "municipality": "New Local Municipality",
+   "authority": "Vhembe DM",
+   "score": 63.8
+  },
+  "NC087": {
+   "municipality": "//Khara Hais/Mier Local Municipality",
+   "authority": "Dawid Kruiper LM",
+   "score": 83.85
+  },
+  "MP326": {
+   "municipality": "Mbombela/Umjindi Local Municipality",
+   "authority": "Mbombela/Umjindi",
+   "score": 69.3
+  },
+  "NW405": {
+   "municipality": "Ventersdorp/Tlokwe  Local Municipality",
+   "authority": "JB Marks LM",
+   "score": 92.6
+  },
+  "MAN": {
+   "municipality": "Mangaung Metropolitan Municipality",
+   "authority": "Mangaung",
+   "score": 62.8
+  },
+  "EC145": {
+   "municipality": "Maletswai/Gariep Local Municipality",
+   "authority": "Joe Gqabi DM",
+   "score": 56.0
+  },
+  "EC139": {
+   "municipality": "Tsolwana/Inkwanca/Lukanji Local Municipality",
+   "authority": "Chris Hani DM",
+   "score": 45.3
+  },
+  "EC129": {
+   "municipality": "Nkonkobe/Nxuba Local Municipality",
+   "authority": "Amatole DM",
+   "score": 59.5
+  },
+  "KZN245": {
+   "municipality": "Umvoti Local Municipality",
+   "authority": "Umzinyathi DM",
+   "score": 31.59
+  },
+  "KZN223": {
+   "municipality": "Mpofana Local Municipality",
+   "authority": "uMgungundlovu DM",
+   "score": 96.44
+  },
+  "GT423": {
+   "municipality": "Lesedi Local Municipality",
+   "authority": "Lesedi LM",
+   "score": 86.2
+  },
+  "GT422": {
+   "municipality": "Midvaal Local Municipality",
+   "authority": "Midvaal LM",
+   "score": 94.8
+  },
+  "GT421": {
+   "municipality": "Emfuleni Local Municipality",
+   "authority": "Emfuleni LM",
+   "score": 85.9
+  },
+  "EC102": {
+   "municipality": "Blue Crane Route Local Municipality",
+   "authority": "Blue Crane Route LM",
+   "score": 37.4
+  },
+  "JHB": {
+   "municipality": "City of Johannesburg Metropolitan Municipality",
+   "authority": "City of Johannesburg",
+   "score": 98.1
+  },
+  "EKU": {
+   "municipality": "Ekurhuleni Metropolitan Municipality",
+   "authority": "City of Ekurhuleni",
+   "score": 97.1
+  }
+ }
+}

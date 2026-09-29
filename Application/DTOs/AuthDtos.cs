@@ -57,7 +57,41 @@ public record AgentProfileDto(
 }
 
 /// <summary>An office's details as a report prints them. Any field may be null.</summary>
-public record OfficeDto(string? Name, string? Address, string? Phone, string? Email, string? Website, string? Footer);
+public record OfficeDto(string? Name, string? Address, string? Phone, string? Email, string? Website, string? Footer,
+    string? Slogan = null, string? Headline = null, OfficeLogosDto? Logos = null);
+
+/// <summary>
+/// An office's logo variants: <see cref="Mark"/> a square mark, <see cref="Wide"/> a wide logo for a
+/// light background, <see cref="WideOnBrand"/> a wide logo drawn for the agency colour.
+/// </summary>
+public record OfficeLogosDto(string? Mark = null, string? Wide = null, string? WideOnBrand = null)
+{
+    public static readonly string[] Kinds = ["mark", "wide", "wideOnBrand"];
+
+    public static OfficeLogosDto? Read(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        var d = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string?>>(json) ?? [];
+        return new OfficeLogosDto(d.GetValueOrDefault("mark"), d.GetValueOrDefault("wide"), d.GetValueOrDefault("wideOnBrand"));
+    }
+
+    public static string? With(string? json, string kind, string? url)
+    {
+        var d = string.IsNullOrWhiteSpace(json)
+            ? new Dictionary<string, string?>()
+            : System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string?>>(json) ?? [];
+        if (url is null) d.Remove(kind); else d[kind] = url;
+        return d.Count == 0 ? null : System.Text.Json.JsonSerializer.Serialize(d);
+    }
+
+    public string? Get(string kind) => kind switch
+    {
+        "mark" => Mark,
+        "wide" => Wide,
+        "wideOnBrand" => WideOnBrand,
+        _ => null,
+    };
+}
 
 public record UpdateAgentProfileRequest(
     string DisplayName,
