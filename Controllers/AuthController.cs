@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
+using Microsoft.AspNetCore.RateLimiting;
 using RealEstateApi.Application.DTOs;
 using RealEstateApi.Application.Services;
 
@@ -83,6 +84,7 @@ public class AuthController : ControllerBase
     /// well-formed email, whether or not the account exists, so emails cannot be enumerated.
     /// </summary>
     [HttpPost("forgot-password")]
+    [EnableRateLimiting("password-reset-request")]
     public async Task<IActionResult> ForgotPassword(
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] ForgotPasswordRequest? request,
         CancellationToken cancellationToken)
@@ -101,6 +103,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("reset-password")]
+    [EnableRateLimiting("password-reset-verify")]
     public async Task<IActionResult> ResetPassword(
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] ResetPasswordRequest? request,
         CancellationToken cancellationToken)

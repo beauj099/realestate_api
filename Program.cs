@@ -1,5 +1,8 @@
  using System.Text;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.IdentityModel.Tokens;
 using RealEstateApi.Application.Services;
@@ -24,6 +27,45 @@ builder.Services.AddCors(options =>
             .AllowAnyOrigin()
             .AllowAnyHeader()
             .AllowAnyMethod());
+});
+
+// Rate limiting: only the password-reset endpoints opt in (see AuthController).
+// Partitioned per client IP so one abuser cannot mail-bomb a victim's inbox via
+// forgot-password or cycle reset codes to get fresh guesses at reset-password.
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        context.HttpContext.Response.ContentType = "application/problem+json";
+        await context.HttpContext.Response.WriteAsJsonAsync(new ProblemDetails
+        {
+            Type = "https://httpstatuses.io/429",
+            Title = "Too many requests",
+            Status = StatusCodes.Status429TooManyRequests,
+            Detail = "Too many requests. Try again later."
+        }, cancellationToken);
+    };
+
+    options.AddPolicy("password-reset-request", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(10),
+                QueueLimit = 0
+            }));
+
+    options.AddPolicy("password-reset-verify", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(5),
+                QueueLimit = 0
+            }));
 });
 
 // Infrastructure
@@ -96,6 +138,9 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseCors("AllowAll");
+// After UseCors so rate-limited 429s still get CORS headers; endpoint-specific
+// policies need routing, which WebApplication wires up implicitly.
+app.UseRateLimiter();
 // Serves the temporary local photo storage at /uploads/... (see
 // LocalFileImageService). Not needed once Storage:Provider is "R2".
 // .heic (listing documents) is not in the default content-type map, so it would 404.
