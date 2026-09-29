@@ -59,6 +59,7 @@ public class AgentComparableService(AgentComparableRepository repository, ILogge
             Bedrooms = ToByte(r.Bedrooms),
             Bathrooms = ToByte(r.Bathrooms),
             Garages = ToByte(r.Garages),
+            HasPool = r.HasPool,
             PropertyTypeId = r.PropertyTypeId,
             Condition = r.Condition,
             SaleDate = r.SaleDate.ToDateTime(TimeOnly.MinValue),
@@ -170,7 +171,8 @@ public class AgentComparableService(AgentComparableRepository repository, ILogge
         c.SaleDate.ToString("yyyy-MM-dd"), c.SalePriceZar,
         c.PricePerFloorM2 is null ? null : Math.Round(c.PricePerFloorM2.Value),
         c.EvidenceLevel, AgentComparableMath.DescribeEvidence(c.EvidenceLevel), c.Verification,
-        c.CorroborationCount, c.Weight, userId is not null && c.CapturedByUserId == userId);
+        c.CorroborationCount, c.Weight, userId is not null && c.CapturedByUserId == userId,
+        c.Bathrooms, c.HasPool);
 }
 
 /// <summary>A municipal sale a captured one can be checked against.</summary>

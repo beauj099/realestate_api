@@ -9,7 +9,7 @@ public class AgentComparableRepository
 {
     private const string Columns =
         "Id, CapturedByUserId, CapturedAt, Municipality, Suburb, Address, Erf, Latitude, Longitude, ErfM2, FloorM2, " +
-        "Bedrooms, Bathrooms, Garages, PropertyTypeId, Condition, SaleDate, SalePriceZar, EvidenceLevel, Notes, " +
+        "Bedrooms, Bathrooms, Garages, HasPool, PropertyTypeId, Condition, SaleDate, SalePriceZar, EvidenceLevel, Notes, " +
         "CorroborationCount, Verification, VerifiedAgainst, VerifiedAt, PricePerFloorM2, Weight";
 
     private readonly DbConnectionFactory _connectionFactory;
@@ -63,11 +63,11 @@ public class AgentComparableRepository
         var id = await connection.QuerySingleAsync<Guid>(new CommandDefinition(
             @"INSERT INTO AgentComparables
                 (CapturedByUserId, Municipality, Suburb, Address, Erf, Latitude, Longitude, ErfM2, FloorM2, Bedrooms,
-                 Bathrooms, Garages, PropertyTypeId, Condition, SaleDate, SalePriceZar, EvidenceLevel, Notes)
+                 Bathrooms, Garages, HasPool, PropertyTypeId, Condition, SaleDate, SalePriceZar, EvidenceLevel, Notes)
               OUTPUT INSERTED.Id
               VALUES
                 (@CapturedByUserId, @Municipality, @Suburb, @Address, @Erf, @Latitude, @Longitude, @ErfM2, @FloorM2, @Bedrooms,
-                 @Bathrooms, @Garages, @PropertyTypeId, @Condition, @SaleDate, @SalePriceZar, @EvidenceLevel, @Notes)",
+                 @Bathrooms, @Garages, @HasPool, @PropertyTypeId, @Condition, @SaleDate, @SalePriceZar, @EvidenceLevel, @Notes)",
             c, transaction: transaction, cancellationToken: cancellationToken));
         transaction.Commit();
         return (id, false);

@@ -18,7 +18,8 @@ public record CreateAgentComparableRequest(
     DateOnly SaleDate,
     decimal SalePriceZar,
     string EvidenceLevel,
-    string? Notes);
+    string? Notes,
+    bool? HasPool = null);
 
 /// <summary>Saved; <see cref="WasDuplicate"/> when it corroborated another agent's entry instead.</summary>
 public record AgentComparableSavedDto(Guid Id, bool WasDuplicate);
@@ -44,7 +45,9 @@ public record AgentComparableDto(
     string Verification,
     int CorroborationCount,
     decimal Weight,
-    bool IsMine);
+    bool IsMine,
+    int? Bathrooms = null,
+    bool? HasPool = null);
 
 /// <summary>Agent-captured sales in a report's suburb, and what the report can say about them.</summary>
 public record AgentComparablesSummaryDto(

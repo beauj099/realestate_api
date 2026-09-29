@@ -78,6 +78,7 @@ public class AgentProfileService
             p.OfficeFooter = Keep(o.Footer, p.OfficeFooter);
             p.OfficeSlogan = Keep(o.Slogan, p.OfficeSlogan);
             p.OfficeHeadline = Keep(o.Headline, p.OfficeHeadline);
+            p.OfficeHeadingFont = Keep(o.HeadingFont, p.OfficeHeadingFont);
         }
         await _profiles.SaveAsync(p, cancellationToken);
         return ToDto(updated, p);
@@ -219,7 +220,7 @@ public class AgentProfileService
             PhotoUrl = p?.PhotoUrl,
             SignatureUrl = p?.SignatureUrl,
             Office = new OfficeDto(p?.OfficeName, p?.OfficeAddress, p?.OfficePhone, p?.OfficeEmail, p?.OfficeWebsite, p?.OfficeFooter,
-                p?.OfficeSlogan, p?.OfficeHeadline, OfficeLogosDto.Read(p?.OfficeLogosJson)),
+                p?.OfficeSlogan, p?.OfficeHeadline, OfficeLogosDto.Read(p?.OfficeLogosJson), p?.OfficeHeadingFont),
             BrochurePages = ReadPages(p?.BrochurePagesJson),
             ReportSettings = string.IsNullOrWhiteSpace(p?.ReportSettingsJson)
                 ? null

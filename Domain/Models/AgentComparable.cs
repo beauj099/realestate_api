@@ -19,6 +19,7 @@ public class AgentComparable
     public byte? Bedrooms { get; set; }
     public byte? Bathrooms { get; set; }
     public byte? Garages { get; set; }
+    public bool? HasPool { get; set; }
     public int? PropertyTypeId { get; set; }
     public string? Condition { get; set; }
 

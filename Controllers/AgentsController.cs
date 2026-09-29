@@ -24,6 +24,28 @@ public class AgentsController : ControllerBase
         return int.TryParse(id, out var parsed) ? parsed : null;
     }
 
+    /// <summary>
+    /// Deletes the signed-in agent's account: disabled at once, restorable by signing in for 90
+    /// days, then anonymised; listings stay (see <see cref="AccountDeletionService"/>). The password
+    /// is asked again. 204 when done, 400 with a "password" error when it is wrong.
+    /// </summary>
+    [HttpPost("me/delete")]
+    public async Task<IActionResult> DeleteMe([FromBody] DeleteAccountRequest request,
+        [FromServices] AccountDeletionService deletion, CancellationToken cancellationToken)
+    {
+        var userId = CurrentUserId();
+        if (userId is null) return Unauthorized();
+        return await deletion.DeleteAsync(userId.Value, request.Password ?? "", cancellationToken) switch
+        {
+            AccountDeletionService.Result.Deleted => NoContent(),
+            AccountDeletionService.Result.NotFound => NotFound(),
+            _ => BadRequest(new ValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["password"] = ["The password is not right."],
+            })),
+        };
+    }
+
     [HttpGet("me")]
     public async Task<IActionResult> GetMe(CancellationToken cancellationToken)
     {

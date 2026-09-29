@@ -168,7 +168,7 @@ public class AgencyService
         a.LogoUrl, a.SortOrder, a.IsCustom)
     {
         Office = new OfficeDto(a.OfficeName, a.OfficeAddress, a.OfficePhone, a.OfficeEmail, a.OfficeWebsite, a.OfficeFooter,
-            a.OfficeSlogan, a.OfficeHeadline, OfficeLogosDto.Read(a.OfficeLogosJson)),
+            a.OfficeSlogan, a.OfficeHeadline, OfficeLogosDto.Read(a.OfficeLogosJson), a.OfficeHeadingFont),
         BrochurePages = AgentProfileService.ReadPages(a.BrochurePagesJson) ?? [],
     };
 }
