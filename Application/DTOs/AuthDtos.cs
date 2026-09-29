@@ -56,9 +56,12 @@ public record AgentProfileDto(
     public System.Text.Json.JsonElement? ReportSettings { get; init; }
 }
 
-/// <summary>An office's details as a report prints them. Any field may be null.</summary>
+/// <summary>
+/// An office's details as a report prints them. Any field may be null. HeadingFont: "serif" for the
+/// report's headings in a serif (for brands with a serif identity), else the body font.
+/// </summary>
 public record OfficeDto(string? Name, string? Address, string? Phone, string? Email, string? Website, string? Footer,
-    string? Slogan = null, string? Headline = null, OfficeLogosDto? Logos = null);
+    string? Slogan = null, string? Headline = null, OfficeLogosDto? Logos = null, string? HeadingFont = null);
 
 /// <summary>
 /// An office's logo variants: <see cref="Mark"/> a square mark, <see cref="Wide"/> a wide logo for a

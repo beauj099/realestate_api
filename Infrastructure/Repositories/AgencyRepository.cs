@@ -10,7 +10,7 @@ public class AgencyRepository
         "Id, Slug, Name, Monogram, PrimaryColor, SecondaryColor, OnPrimaryColor, BannerColor, LogoUrl, " +
         "SortOrder, IsCustom, IsActive, CreatedByUserId, CreatedAt, UpdatedAt, " +
         "OfficeName, OfficeAddress, OfficePhone, OfficeEmail, OfficeWebsite, OfficeFooter, BrochurePagesJson, " +
-        "OfficeSlogan, OfficeHeadline, OfficeLogosJson";
+        "OfficeSlogan, OfficeHeadline, OfficeLogosJson, OfficeHeadingFont";
 
     private readonly DbConnectionFactory _connectionFactory;
 

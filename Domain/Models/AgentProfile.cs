@@ -23,6 +23,8 @@ public class AgentProfile
     public string? OfficeFooter { get; set; }
     public string? OfficeSlogan { get; set; }
     public string? OfficeHeadline { get; set; }
+    /// <summary>"serif" for the report's headings in a serif; null for the body font.</summary>
+    public string? OfficeHeadingFont { get; set; }
     /// <summary>{"mark": url, "wide": url, "wideOnBrand": url}; see OfficeLogosDto.</summary>
     public string? OfficeLogosJson { get; set; }
     public string? BrochurePagesJson { get; set; }
