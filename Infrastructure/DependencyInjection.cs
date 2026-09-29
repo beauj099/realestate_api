@@ -144,6 +144,7 @@ public static class DependencyInjection
         services.AddScoped<ForSaleListingsService>();
         services.AddScoped<AddressSearchService>();
         services.AddScoped<AreaDetailsService>();
+        services.AddScoped<LoadSheddingService>();
         services.AddScoped<PropertyReportService>();
 
         return services;

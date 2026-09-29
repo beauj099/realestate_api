@@ -55,6 +55,9 @@ public record AreaDetailsDto(ClimateDto? Climate, PopulationDto? Population, Inc
 
     /// <summary>The municipality's drinking-water score in the Blue Drop report.</summary>
     public WaterQualityDto? Water { get; init; }
+
+    /// <summary>Past scheduled load-shedding for the area (only once the schedule is imported).</summary>
+    public LoadSheddingDto? LoadShedding { get; init; }
 }
 
 public record NearbyPlaceDto(string Name, string Kind, double DistanceM, double Lat, double Lng);
@@ -76,7 +79,7 @@ public record WaterQualityDto(string Municipality, string Authority, double Scor
 /// tools/BuildCrimeStats). Results are cached for a month per ~100 m.
 /// </summary>
 public class AreaDetailsService(IHttpClientFactory httpFactory, IMemoryCache cache, IWebHostEnvironment env,
-    ILogger<AreaDetailsService> log)
+    LoadSheddingService loadShedding, ILogger<AreaDetailsService> log)
 {
     public const string HttpClientName = "area";
     private const string NasaPower = "https://power.larc.nasa.gov/api/temporal/daily/point";
@@ -123,10 +126,14 @@ public class AreaDetailsService(IHttpClientFactory httpFactory, IMemoryCache cac
         var income = population?.MunicipalityCode is { } muni
             ? await Cached($"area:income:{muni}", () => IncomeAsync(muni, population.Dto.Municipality, ct))
             : null;
+        var shedding = population is null
+            ? null
+            : await loadShedding.ForAsync([population.Dto.SubPlace, population.Dto.MainPlace], population.Dto.Municipality, ct);
         return new AreaDetailsDto(climate.Result, population?.Dto, income, crime.Result)
         {
             Nearby = nearby.Result,
             Water = water.Result,
+            LoadShedding = shedding,
         };
     }
 

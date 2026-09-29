@@ -90,8 +90,10 @@ Settings (`appsettings.Local.json` or environment variables):
   sales also match by distance when the property's location is known.
 - **Property24** answers 503 when hit repeatedly; the suburb sitemap (3.6 MB) is kept on disk a
   week, and a known suburb id needs no sitemap at all.
-- **Load-shedding** is not included: EskomSePush's free tier is non-commercial and there is no
-  free history. It needs their business licence first.
+- **Load-shedding** (past only) comes from three CSVs imported by `tools/ImportLoadShedding` into
+  `dbo.LoadShedding*` (patch `2026-09-29_load_shedding.sql`); the CSVs are the contract and their
+  source is a separate job (not the archived, non-commercial eskom-calendar repo).
+  `LoadSheddingCalculator` gathers every stage period's slots per day and merges once.
 
 ## Not done yet
 
