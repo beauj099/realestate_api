@@ -17,7 +17,8 @@ public class ListingValuationRepository
     {
         using var connection = _connectionFactory.CreateConnection();
         var command = new CommandDefinition(
-            "SELECT lv.Id, lv.OwnersNetPrice, lv.AgentValuation, lv.CommissionPercent, lv.LastPurchaseDate, lv.LastPurchasePriceZar " +
+            "SELECT lv.Id, lv.OwnersNetPrice, lv.AgentValuation, lv.CommissionPercent, lv.LastPurchaseDate, lv.LastPurchasePriceZar, " +
+            "lv.ValueLowZar, lv.ValueHighZar, lv.ListingPriceZar, lv.AdjustmentReason, lv.CommissionLatePercent, lv.CommissionEarlyMonths, lv.CommissionIncludesVat, lv.InterestRatePercent, lv.BondTermYears, lv.DepositPercent, lv.BondInstitution, lv.BondAmountZar " +
             "FROM ListingValuation lv INNER JOIN Listings l ON l.ListingValuationId = lv.Id WHERE l.Id = @ListingId",
             new { ListingId = listingId }, cancellationToken: cancellationToken);
         return await connection.QueryFirstOrDefaultAsync<ListingValuation>(command);
@@ -37,14 +38,12 @@ public class ListingValuationRepository
         if (valuationId is null)
         {
             var insertCommand = new CommandDefinition(
-                "INSERT INTO ListingValuation (OwnersNetPrice, AgentValuation, CommissionPercent, LastPurchaseDate, LastPurchasePriceZar) " +
+                "INSERT INTO ListingValuation (OwnersNetPrice, AgentValuation, CommissionPercent, LastPurchaseDate, LastPurchasePriceZar, " +
+                "ValueLowZar, ValueHighZar, ListingPriceZar, AdjustmentReason, CommissionLatePercent, CommissionEarlyMonths, CommissionIncludesVat, InterestRatePercent, BondTermYears, DepositPercent, BondInstitution, BondAmountZar) " +
                 "OUTPUT INSERTED.Id " +
-                "VALUES (@OwnersNetPrice, @AgentValuation, @CommissionPercent, @LastPurchaseDate, @LastPurchasePriceZar)",
-                new
-                {
-                    valuation.OwnersNetPrice, valuation.AgentValuation, valuation.CommissionPercent,
-                    valuation.LastPurchaseDate, valuation.LastPurchasePriceZar,
-                },
+                "VALUES (@OwnersNetPrice, @AgentValuation, @CommissionPercent, @LastPurchaseDate, @LastPurchasePriceZar, " +
+                "@ValueLowZar, @ValueHighZar, @ListingPriceZar, @AdjustmentReason, @CommissionLatePercent, @CommissionEarlyMonths, @CommissionIncludesVat, @InterestRatePercent, @BondTermYears, @DepositPercent, @BondInstitution, @BondAmountZar)",
+                valuation,
                 transaction: transaction, cancellationToken: cancellationToken);
             valuationId = await connection.ExecuteScalarAsync<int>(insertCommand);
 
@@ -58,22 +57,28 @@ public class ListingValuationRepository
         {
             var updateCommand = new CommandDefinition(
                 "UPDATE ListingValuation SET OwnersNetPrice = @OwnersNetPrice, AgentValuation = @AgentValuation, CommissionPercent = @CommissionPercent, " +
-                "LastPurchaseDate = @LastPurchaseDate, LastPurchasePriceZar = @LastPurchasePriceZar WHERE Id = @Id",
-                new
-                {
-                    valuation.OwnersNetPrice, valuation.AgentValuation, valuation.CommissionPercent,
-                    valuation.LastPurchaseDate, valuation.LastPurchasePriceZar, Id = valuationId,
-                },
+                "LastPurchaseDate = @LastPurchaseDate, LastPurchasePriceZar = @LastPurchasePriceZar, " +
+                "ValueLowZar = @ValueLowZar, ValueHighZar = @ValueHighZar, ListingPriceZar = @ListingPriceZar, AdjustmentReason = @AdjustmentReason, CommissionLatePercent = @CommissionLatePercent, CommissionEarlyMonths = @CommissionEarlyMonths, CommissionIncludesVat = @CommissionIncludesVat, InterestRatePercent = @InterestRatePercent, BondTermYears = @BondTermYears, DepositPercent = @DepositPercent, BondInstitution = @BondInstitution, BondAmountZar = @BondAmountZar WHERE Id = @Id",
+                UpdateParameters(valuation, valuationId.Value),
                 transaction: transaction, cancellationToken: cancellationToken);
             await connection.ExecuteAsync(updateCommand);
         }
 
         var selectCommand = new CommandDefinition(
-            "SELECT Id, OwnersNetPrice, AgentValuation, CommissionPercent, LastPurchaseDate, LastPurchasePriceZar FROM ListingValuation WHERE Id = @Id",
+            "SELECT Id, OwnersNetPrice, AgentValuation, CommissionPercent, LastPurchaseDate, LastPurchasePriceZar, " +
+            "ValueLowZar, ValueHighZar, ListingPriceZar, AdjustmentReason, CommissionLatePercent, CommissionEarlyMonths, CommissionIncludesVat, InterestRatePercent, BondTermYears, DepositPercent, BondInstitution, BondAmountZar FROM ListingValuation WHERE Id = @Id",
             new { Id = valuationId }, transaction: transaction, cancellationToken: cancellationToken);
         var result = await connection.QueryFirstOrDefaultAsync<ListingValuation>(selectCommand);
 
         transaction.Commit();
         return result!;
+    }
+
+    /// <summary>Every column of the valuation, with the row's own id.</summary>
+    private static DynamicParameters UpdateParameters(ListingValuation valuation, int id)
+    {
+        var p = new DynamicParameters(valuation);
+        p.Add("Id", id);
+        return p;
     }
 }

@@ -50,7 +50,8 @@ internal static class RoomDtoBuilder
                 : null,
             mapper.Map<List<FeatureDto>>(featuresByRoom.GetValueOrDefault(room.Id) ?? new List<Feature>()),
             mapper.Map<List<CustomFeatureDto>>(customFeaturesByRoom.GetValueOrDefault(room.Id) ?? new List<ListingRoomCustomFeature>()),
-            photosByRoom.GetValueOrDefault(room.Id) ?? new List<RoomPhotoDto>()
+            photosByRoom.GetValueOrDefault(room.Id) ?? new List<RoomPhotoDto>(),
+            room.UnitDetails
         )).ToList();
     }
 

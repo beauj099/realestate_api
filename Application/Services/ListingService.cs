@@ -249,6 +249,9 @@ public class ListingService
     public async Task<ValuationDto> UpsertValuationAsync(int listingId, UpsertValuationRequest request, CancellationToken cancellationToken = default)
     {
         var valuation = _mapper.Map<ListingValuation>(request);
+        // Free text kept to the columns' sizes.
+        valuation.AdjustmentReason = Clip(valuation.AdjustmentReason, 500);
+        valuation.BondInstitution = Clip(valuation.BondInstitution, 100);
         var result = await _valuationRepo.UpsertAsync(listingId, valuation, cancellationToken);
         return _mapper.Map<ValuationDto>(result);
     }
@@ -298,5 +301,11 @@ public class ListingService
             listing.HouseScoreIsManual,
             listing.ArchivedAt
         );
+    }
+
+    private static string? Clip(string? text, int max)
+    {
+        var t = text?.Trim();
+        return string.IsNullOrEmpty(t) ? null : t.Length <= max ? t : t[..max];
     }
 }
