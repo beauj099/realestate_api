@@ -1701,7 +1701,17 @@ namespace PropertyData.CapeTown
                 ? Optional(spatial.GetApprovedWorkAsync(parcel.Erf, parcel.Suburb, ct), "plan approvals")
                 : Task.FromResult(new List<ApprovedWork>());
 
-            await Task.WhenAll(zoningTask, suburbTask, footTask, workTask);
+            // The valuation roll keeps a session between its pages, so the dwelling extent and the
+            // area's sales are asked one after the other there, but alongside the spatial services
+            // above and the parcel centres below (other hosts): the report waits for the slower
+            // strand, not for every step in turn.
+            var rollTask = RollDetailsAsync(o, rollRow, ct);
+            var location = parcel.Boundary is null ? (LatLng?)null : Geo.Centroid(parcel.Boundary);
+            var centresTask = o.IncludeComparables && rollRow is not null && location is { } centre
+                ? CentresAsync(centre, ct)
+                : Task.FromResult<Dictionary<string, LatLng>?>(null);
+
+            await Task.WhenAll(zoningTask, suburbTask, footTask, workTask, rollTask, centresTask);
             var (zCode, zDesc) = zoningTask.Result;
             var buildings = footTask.Result;
             var work = workTask.Result;
@@ -1711,13 +1721,9 @@ namespace PropertyData.CapeTown
             if (work.Count > 0) Cite("approvedWork", CapeTownSpatialClient.PlanApprovals);
             if (suburb is not null) Cite("suburbBenchmark", CapeTownSpatialClient.SuburbValLayer);
 
-            // 4. Dwelling extent — the stateful step; fall back to roof area
-            double? dwelling = null;
-            if (o.IncludeDwellingExtent && rollRow is not null)
-            {
-                dwelling = await roll.TryGetDwellingExtentAsync(rollRow.ValuationRef, ct);
-                if (dwelling is not null) Cite("dwellingExtent", $"{CapeTownRollClient.Base}/DetStructRes");
-            }
+            // 4. Dwelling extent — from the roll strand above; fall back to roof area
+            var (dwelling, rawSales) = rollTask.Result;
+            if (dwelling is not null) Cite("dwellingExtent", $"{CapeTownRollClient.Base}/DetStructRes");
 
             var refWithVal = @ref with { ValuationRef = rollRow?.ValuationRef, Sg26 = @ref.Sg26 ?? parcel.Sg26 };
 
@@ -1725,7 +1731,7 @@ namespace PropertyData.CapeTown
             {
                 Ref = refWithVal,
                 FormattedAddress = rollRow?.PhysicalAddress ?? parcel.FormattedAddress,
-                Location = parcel.Boundary is null ? null : Geo.Centroid(parcel.Boundary),
+                Location = location,
                 ExtentM2Deed = rollRow?.ExtentM2,
                 ExtentM2Geodesic = geodesic,
                 ZoningCode = zCode,
@@ -1751,9 +1757,8 @@ namespace PropertyData.CapeTown
             };
 
             // 5. Comparables — needs the subject's own sizes, so it runs last
-            if (o.IncludeComparables && rollRow is not null)
+            if (o.IncludeComparables && rollRow is not null && rawSales is not null)
             {
-                var rawSales = await roll.GetAreaSalesAsync(rollRow.ValuationRef, ct);
                 Cite("comparables", $"{CapeTownRollClient.Base}/Sales");
 
                 var rules = o.ComparableSinceYear > 0
@@ -1762,27 +1767,19 @@ namespace PropertyData.CapeTown
 
                 // The City's list is its own "general area"; measure each sale so the analyzer can
                 // keep the nearest. Without the parcel centres it falls back to the whole list.
-                if (record.Location is { } here)
+                if (record.Location is { } here && centresTask.Result is { } centres)
                 {
-                    try
+                    foreach (var sale in rawSales)
                     {
-                        var centres = await spatial.GetParcelCentresNearAsync(here, ComparableRules.RadiusStepsM[^1], ct);
-                        foreach (var sale in rawSales)
+                        var parts = sale.RegisteredDescription.Split(' ', 2);
+                        var erfKey = CapeTownSpatialClient.ErfKey(parts[0]);
+                        if (erfKey is null) continue;
+                        var town = parts.Length > 1 ? CapeTownSpatialClient.AllotmentKey(parts[1]) : "";
+                        if (centres.TryGetValue($"{erfKey} {town}", out var at) || centres.TryGetValue(erfKey, out at))
                         {
-                            var parts = sale.RegisteredDescription.Split(' ', 2);
-                            var erfKey = CapeTownSpatialClient.ErfKey(parts[0]);
-                            if (erfKey is null) continue;
-                            var town = parts.Length > 1 ? CapeTownSpatialClient.AllotmentKey(parts[1]) : "";
-                            if (centres.TryGetValue($"{erfKey} {town}", out var at) || centres.TryGetValue(erfKey, out at))
-                            {
-                                sale.Location = at;
-                                sale.DistanceM = Math.Round(Geo.DistanceM(here, at));
-                            }
+                            sale.Location = at;
+                            sale.DistanceM = Math.Round(Geo.DistanceM(here, at));
                         }
-                    }
-                    catch (HttpRequestException ex)
-                    {
-                        log.LogWarning(ex, "Parcel centres unavailable; comparables not measured by distance");
                     }
                 }
 
@@ -1799,6 +1796,37 @@ namespace PropertyData.CapeTown
             }
 
             return record;
+        }
+
+        /// <summary>
+        /// The roll's stateful steps, in order: the dwelling extent, then the area's sales (each
+        /// only when asked for). A failed sales page fails the report, as before.
+        /// </summary>
+        private async Task<(double? Dwelling, List<Comparable>? Sales)> RollDetailsAsync(
+            RecordOptions o, RollRow? rollRow, CancellationToken ct)
+        {
+            if (rollRow is null) return (null, null);
+            var dwelling = o.IncludeDwellingExtent
+                ? await roll.TryGetDwellingExtentAsync(rollRow.ValuationRef, ct)
+                : null;
+            var sales = o.IncludeComparables
+                ? await roll.GetAreaSalesAsync(rollRow.ValuationRef, ct)
+                : null;
+            return (dwelling, sales);
+        }
+
+        /// <summary>Parcel centres around the property, to measure sales; null when unavailable.</summary>
+        private async Task<Dictionary<string, LatLng>?> CentresAsync(LatLng here, CancellationToken ct)
+        {
+            try
+            {
+                return await spatial.GetParcelCentresNearAsync(here, ComparableRules.RadiusStepsM[^1], ct);
+            }
+            catch (HttpRequestException ex)
+            {
+                log.LogWarning(ex, "Parcel centres unavailable; comparables not measured by distance");
+                return null;
+            }
         }
 
         private static RollRow? PickRollRow(List<RollRow> rows, ParcelHit parcel)
