@@ -222,6 +222,9 @@ public class ListingService
     {
         var address = _mapper.Map<ListingAddress>(request);
         address.ListingId = listingId;
+        // Null keeps the stored name; "" clears it (the repository turns it into NULL).
+        if (address.MarketingArea is { } area)
+            address.MarketingArea = area.Trim().Length <= 100 ? area.Trim() : area.Trim()[..100];
         var result = await _addressRepo.UpsertAsync(address, cancellationToken);
         return _mapper.Map<ListingAddressDto>(result);
     }

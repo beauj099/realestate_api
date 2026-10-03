@@ -12,7 +12,10 @@ public record UpsertAddressRequest(
     string? Country,
     string? PostalCode,
     decimal? Latitude,
-    decimal? Longitude
+    decimal? Longitude,
+    // Property24's name for the area (see ListingAddress.MarketingArea). Omitted: unchanged;
+    // "" clears it.
+    string? MarketingArea = null
 );
 
 public record ListingAddressDto(
@@ -29,5 +32,8 @@ public record ListingAddressDto(
     string? Country,
     string? PostalCode,
     decimal? Latitude,
-    decimal? Longitude
+    decimal? Longitude,
+    // Property24's name for the area (see ListingAddress.MarketingArea). Omitted: unchanged;
+    // "" clears it.
+    string? MarketingArea = null
 );
