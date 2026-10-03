@@ -90,6 +90,28 @@ public class ListingsController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>The listing's further details (myEdge form, mandate information) as a JSON object.</summary>
+    [HttpPut("{id}/details")]
+    public async Task<IActionResult> UpdateDetails(int id, [FromBody] UpdateListingDetailsRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _listingService.UpdateDetailsAsync(id, request, CurrentUserId(), IsAdmin(), cancellationToken);
+            return NoContent();
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new ValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["details"] = [ex.Message]
+            })
+            {
+                Type = "https://httpstatuses.io/400",
+                Title = "Validation failed"
+            });
+        }
+    }
+
     [HttpPut("{id}/archive")]
     public async Task<IActionResult> SetArchived(int id, [FromBody] ArchiveListingRequest request, CancellationToken cancellationToken)
     {

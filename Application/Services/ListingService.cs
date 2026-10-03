@@ -191,6 +191,29 @@ public class ListingService
             throw new KeyNotFoundException($"Listing {id} not found");
     }
 
+    /// <summary>Stores the listing's details (JSON object); 404 when the listing is not the caller's.
+    /// ArgumentException when it is not a JSON object or is too long.</summary>
+    public async Task UpdateDetailsAsync(int id, UpdateListingDetailsRequest request, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
+    {
+        var json = string.IsNullOrWhiteSpace(request.Details) ? null : request.Details;
+        if (json is not null)
+        {
+            if (json.Length > 20000) throw new ArgumentException("Details are too long.");
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(json);
+                if (doc.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object)
+                    throw new ArgumentException("Details must be a JSON object.");
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                throw new ArgumentException("Details are not valid JSON.");
+            }
+        }
+        if (!await _listingRepo.UpdateDetailsAsync(id, json, userId, isAdmin, cancellationToken))
+            throw new KeyNotFoundException($"Listing {id} not found");
+    }
+
     /// <summary>Archives or restores a listing; 404 (KeyNotFoundException) when the listing is not the caller's.</summary>
     public async Task SetArchivedAsync(int id, ArchiveListingRequest request, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
     {
@@ -302,7 +325,8 @@ public class ListingService
             _mapper.Map<List<OutdoorFeatureDto>>(outdoorFeaturesTask.Result),
             listing.HouseScore,
             listing.HouseScoreIsManual,
-            listing.ArchivedAt
+            listing.ArchivedAt,
+            listing.DetailsJson
         );
     }
 
