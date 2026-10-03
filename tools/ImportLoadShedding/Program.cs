@@ -1,15 +1,24 @@
-// Loads the three load-shedding CSVs (see README.md) into dbo.LoadShedding*.
+// Loads past load-shedding into dbo.LoadShedding* (see README.md). Two sources:
 //
+//   dotnet run --project tools/ImportLoadShedding -- --coct [--from 2020-01-01] [--at lat,lng] [--api-dir <path>] [--apply]
+//       the City of Cape Town's record of load-shedding per area and the areas' outlines, fetched
+//       from its open data into LoadSheddingOutages and LoadSheddingAreaShapes
 //   dotnet run --project tools/ImportLoadShedding -- --dir <folder> [--api-dir <path>] [--apply]
+//       the three schedule CSVs into LoadSheddingStagePeriods, -AreaSlots and -SuburbAreas
 //
-// Without --apply it is a dry run: the files are read and checked, nothing is written.
+// Without --apply (or with --dry-run) nothing is written: the data is fetched or read, checked
+// and summarised.
 
 using System.Data;
 using System.Globalization;
 using System.Text;
 using Microsoft.Data.SqlClient;
-using Microsoft.Extensions.Configuration;
 
+if (args.Contains("--apply") && args.Contains("--dry-run"))
+{
+    Console.WriteLine("Give --apply or --dry-run, not both.");
+    return 2;
+}
 var apply = args.Contains("--apply");
 string? Arg(string name)
 {
@@ -17,9 +26,21 @@ string? Arg(string name)
     return i >= 0 && i + 1 < args.Length ? args[i + 1] : null;
 }
 
-var dir = Arg("--dir") ?? throw new ArgumentException("Give --dir <folder with the three CSVs>.");
 var apiDir = Path.GetFullPath(Arg("--api-dir") ?? Directory.GetCurrentDirectory());
 Console.WriteLine($"Mode: {(apply ? "APPLY" : "DRY RUN (nothing is written; add --apply)")}");
+
+if (args.Contains("--coct"))
+{
+    var from = Arg("--from") is { } f
+        ? DateTime.ParseExact(f, "yyyy-MM-dd", CultureInfo.InvariantCulture)
+        : CapeTownImport.DefaultFrom;
+    (double, double)? at = Arg("--at") is { } point && point.Split(',') is [var lat, var lng]
+        ? (double.Parse(lat, CultureInfo.InvariantCulture), double.Parse(lng, CultureInfo.InvariantCulture))
+        : null;
+    return await CapeTownImport.RunAsync(apply, apiDir, from, at);
+}
+
+var dir = Arg("--dir") ?? throw new ArgumentException("Give --coct, or --dir <folder with the three CSVs>.");
 
 var inv = CultureInfo.InvariantCulture;
 var errors = new List<string>();
@@ -100,31 +121,16 @@ if (errors.Count > 0)
 }
 if (!apply) return 0;
 
-var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production";
-var config = new ConfigurationBuilder().SetBasePath(apiDir)
-    .AddJsonFile("appsettings.json", optional: true)
-    .AddJsonFile($"appsettings.{environment}.json", optional: true)
-    .AddJsonFile("appsettings.Local.json", optional: true)
-    .AddEnvironmentVariables().Build();
-await using var db = new SqlConnection(config["ConnectionStrings:DefaultConnection"]
-    ?? throw new InvalidOperationException("Missing setting 'ConnectionStrings:DefaultConnection'."));
-await db.OpenAsync();
+await using var db = await Db.OpenAsync(apiDir);
 await using var tx = (SqlTransaction)await db.BeginTransactionAsync();
 foreach (var table in new[] { "LoadSheddingStagePeriods", "LoadSheddingAreaSlots", "LoadSheddingSuburbAreas" })
     await new SqlCommand($"DELETE FROM dbo.{table}", db, tx).ExecuteNonQueryAsync();
-await Copy(db, tx, "LoadSheddingStagePeriods", periods);
-await Copy(db, tx, "LoadSheddingAreaSlots", slots);
-await Copy(db, tx, "LoadSheddingSuburbAreas", suburbs);
+await Db.CopyAsync(db, tx, "LoadSheddingStagePeriods", periods);
+await Db.CopyAsync(db, tx, "LoadSheddingAreaSlots", slots);
+await Db.CopyAsync(db, tx, "LoadSheddingSuburbAreas", suburbs);
 await tx.CommitAsync();
 Console.WriteLine("Imported. The API picks the new figures up within a week, or at once after a restart.");
 return 0;
-
-static async Task Copy(SqlConnection db, SqlTransaction tx, string table, DataTable rows)
-{
-    using var bulk = new SqlBulkCopy(db, SqlBulkCopyOptions.Default, tx) { DestinationTableName = "dbo." + table, BatchSize = 5000 };
-    foreach (DataColumn c in rows.Columns) bulk.ColumnMappings.Add(c.ColumnName, c.ColumnName);
-    await bulk.WriteToServerAsync(rows);
-}
 
 static string Slug(string s) =>
     string.Join('-', s.Trim().ToLowerInvariant().Split([' ', '\t', '_', '-'], StringSplitOptions.RemoveEmptyEntries));

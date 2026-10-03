@@ -60,6 +60,10 @@ public sealed class AreaDetailsTests(ITestOutputHelper output)
         services.AddMemoryCache();
         services.AddHttpClient(AreaDetailsService.HttpClientName, c => c.DefaultRequestHeaders.UserAgent.ParseAdd("RealWorth-Tests/1.0"));
         services.AddSingleton<IWebHostEnvironment>(new TestEnv(ApiRoot()));
+        // No database here: load-shedding finds none and the section is left out.
+        services.AddSingleton(new RealEstateApi.Infrastructure.Data.DbConnectionFactory(
+            "Server=127.0.0.1,1;Database=none;Connect Timeout=2;TrustServerCertificate=True"));
+        services.AddScoped<LoadSheddingService>();
         services.AddScoped<AreaDetailsService>();
         await using var sp = services.BuildServiceProvider();
 
