@@ -36,9 +36,22 @@ public class ListingRoomsController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Create(int listingId, [FromBody] CreateRoomRequest request, CancellationToken cancellationToken)
     {
-        var result = await _roomService.CreateRoomAsync(listingId, request, CurrentUserId(), IsAdmin(), cancellationToken);
-        return CreatedAtAction(nameof(GetAll), new { listingId }, result);
+        try
+        {
+            var result = await _roomService.CreateRoomAsync(listingId, request, CurrentUserId(), IsAdmin(), cancellationToken);
+            return CreatedAtAction(nameof(GetAll), new { listingId }, result);
+        }
+        catch (ArgumentException ex)
+        {
+            return UnitDetailsError(ex.Message);
+        }
     }
+
+    private static BadRequestObjectResult UnitDetailsError(string message) =>
+        new(new ValidationProblemDetails(new Dictionary<string, string[]>
+        {
+            ["unitDetails"] = [message],
+        }));
 
     private static BadRequestObjectResult FileValidationError(string message) =>
         new(new ValidationProblemDetails(new Dictionary<string, string[]>
@@ -147,9 +160,16 @@ public class ListingRoomsController : ControllerBase
     [HttpPut("{roomId}")]
     public async Task<IActionResult> Update(int listingId, int roomId, [FromBody] UpdateRoomRequest request, CancellationToken cancellationToken)
     {
-        var result = await _roomService.UpdateRoomAsync(listingId, roomId, request, CurrentUserId(), IsAdmin(), cancellationToken);
-        if (result == null) return NotFound();
-        return Ok(result);
+        try
+        {
+            var result = await _roomService.UpdateRoomAsync(listingId, roomId, request, CurrentUserId(), IsAdmin(), cancellationToken);
+            if (result == null) return NotFound();
+            return Ok(result);
+        }
+        catch (ArgumentException ex)
+        {
+            return UnitDetailsError(ex.Message);
+        }
     }
 
     [HttpDelete("{roomId}")]

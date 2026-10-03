@@ -14,7 +14,7 @@ public class ListingRepository
         _connectionFactory = connectionFactory;
     }
 
-    private const string Columns = "Id, ReferenceNumber, P24Ref, PropertyTypeId, ListingValuationId, ListDate, Status, UserId, CreatedAt, UpdatedAt, HouseScore, HouseScoreIsManual, ArchivedAt";
+    private const string Columns = "Id, ReferenceNumber, P24Ref, PropertyTypeId, ListingValuationId, ListDate, Status, UserId, CreatedAt, UpdatedAt, HouseScore, HouseScoreIsManual, ArchivedAt, DetailsJson";
 
     /// <summary>A contact's display name: its FullName, or its CompanyName when FullName is blank.</summary>
     private const string ContactDisplayName = "COALESCE(NULLIF(LTRIM(RTRIM(FullName)), ''), CompanyName)";
@@ -266,6 +266,18 @@ public class ListingRepository
             "UPDATE Listings SET HouseScore = @Score, HouseScoreIsManual = @IsManual, UpdatedAt = GETUTCDATE() " +
             "WHERE Id = @Id AND (@UserId IS NULL OR UserId = @UserId)",
             new { Id = id, Score = score, IsManual = isManual, UserId = OwnerFilter(userId, isAdmin) },
+            cancellationToken: cancellationToken);
+        return await connection.ExecuteAsync(command) > 0;
+    }
+
+    /// <summary>Stores the listing's details JSON on an owned listing; false when not found.</summary>
+    public async Task<bool> UpdateDetailsAsync(int id, string? detailsJson, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        var command = new CommandDefinition(
+            "UPDATE Listings SET DetailsJson = @DetailsJson, UpdatedAt = GETUTCDATE() " +
+            "WHERE Id = @Id AND (@UserId IS NULL OR UserId = @UserId)",
+            new { Id = id, DetailsJson = detailsJson, UserId = OwnerFilter(userId, isAdmin) },
             cancellationToken: cancellationToken);
         return await connection.ExecuteAsync(command) > 0;
     }

@@ -16,4 +16,7 @@ public class ListingAddress
     public string? PostalCode { get; set; }
     public decimal? Latitude { get; set; }
     public decimal? Longitude { get; set; }
+    /// <summary>The area buyers search for it by, Property24's name (Steynsrust), when it differs
+    /// from the official Suburb (Lynn's View) the records use. Null: not set.</summary>
+    public string? MarketingArea { get; set; }
 }

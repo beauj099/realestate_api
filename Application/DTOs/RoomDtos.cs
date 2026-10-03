@@ -4,14 +4,17 @@ public record CreateRoomRequest(
     string Name,
     int RoomTypeId,
     string? RoomTypeOther,
-    string? PhotoUrl
+    string? PhotoUrl,
+    // A flatlet's layout, JSON (see ListingRoom.UnitDetails).
+    string? UnitDetails = null
 );
 
 public record UpdateRoomRequest(
     string? Name,
     int? RoomTypeId,
     string? RoomTypeOther,
-    string? PhotoUrl
+    string? PhotoUrl,
+    string? UnitDetails = null
 );
 
 public record RoomDto(
@@ -28,7 +31,8 @@ public record RoomDto(
     List<CustomFeatureDto> CustomFeatures,
     // All of the room's photos, ordered by SortOrder then Id. PhotoUrl above is the
     // cover (the first of these) and is kept for older app builds.
-    List<RoomPhotoDto> Photos
+    List<RoomPhotoDto> Photos,
+    string? UnitDetails = null
 );
 
 public record RoomPhotoDto(

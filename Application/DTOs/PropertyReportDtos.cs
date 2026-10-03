@@ -38,6 +38,11 @@ public record AddressSuggestionDto(
 
 public record PropertyCandidateDto(string Municipality, string Erf, string? Sg26, string Suburb, string Township);
 
+/// <summary>The erf under a point and its outline, for the app's pin map.</summary>
+public record ParcelOutlineDto(string Municipality, string Erf, List<LatLngDto> Points);
+
+public record LatLngDto(double Lat, double Lng);
+
 public record MoneyRangeDto(decimal? Low, decimal? Mid, decimal? High);
 
 public record ComparableDto(

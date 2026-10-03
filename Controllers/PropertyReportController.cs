@@ -52,6 +52,27 @@ public class PropertyReportController : ControllerBase
         Ok(await search.AtAsync(lat, lng, cancellationToken));
 
     /// <summary>
+    /// The erf under a GPS point and its outline, for drawing the boundary on the app's pin map.
+    /// 204 when there is no parcel with a boundary there.
+    /// </summary>
+    [HttpGet("parcel-at")]
+    public async Task<IActionResult> ParcelAt([FromQuery] double lat, [FromQuery] double lng,
+        CancellationToken cancellationToken)
+    {
+        if (lat is < -35.5 or > -21.5 || lng is < 16 or > 33.5)
+            return ValidationFailed("lat", "The point must be in South Africa.");
+        try
+        {
+            var parcel = await _reports.GetParcelAtAsync(lat, lng, cancellationToken);
+            return parcel is null ? NoContent() : Ok(parcel);
+        }
+        catch (HttpRequestException)
+        {
+            return CityUnavailable();
+        }
+    }
+
+    /// <summary>
     /// The same search anywhere in South Africa, from OpenStreetMap (Photon): streets, numbered
     /// houses where mapped, suburbs and towns. Slower (seconds); ranked on the same scale as
     /// <see cref="Suggest"/>.

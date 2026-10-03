@@ -50,8 +50,14 @@ public record ListingResponse(
     List<OutdoorFeatureDto> OutdoorFeatures,
     decimal? HouseScore = null,
     bool HouseScoreIsManual = false,
-    DateTime? ArchivedAt = null
+    DateTime? ArchivedAt = null,
+    // The listing's further details as JSON (see Listing.DetailsJson).
+    string? Details = null
 );
+
+/// <summary>PUT /api/listings/{id}/details: the details as a JSON object (text), at most 20 000
+/// characters. Replaces what is stored.</summary>
+public record UpdateListingDetailsRequest(string? Details);
 
 /// <summary>PUT /api/listings/{id}/house-score. Score is a percentage (0-100); null clears it.</summary>
 public record UpdateHouseScoreRequest(decimal? Score, bool IsManual);

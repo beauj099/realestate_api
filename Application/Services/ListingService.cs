@@ -191,6 +191,29 @@ public class ListingService
             throw new KeyNotFoundException($"Listing {id} not found");
     }
 
+    /// <summary>Stores the listing's details (JSON object); 404 when the listing is not the caller's.
+    /// ArgumentException when it is not a JSON object or is too long.</summary>
+    public async Task UpdateDetailsAsync(int id, UpdateListingDetailsRequest request, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
+    {
+        var json = string.IsNullOrWhiteSpace(request.Details) ? null : request.Details;
+        if (json is not null)
+        {
+            if (json.Length > 20000) throw new ArgumentException("Details are too long.");
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(json);
+                if (doc.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object)
+                    throw new ArgumentException("Details must be a JSON object.");
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                throw new ArgumentException("Details are not valid JSON.");
+            }
+        }
+        if (!await _listingRepo.UpdateDetailsAsync(id, json, userId, isAdmin, cancellationToken))
+            throw new KeyNotFoundException($"Listing {id} not found");
+    }
+
     /// <summary>Archives or restores a listing; 404 (KeyNotFoundException) when the listing is not the caller's.</summary>
     public async Task SetArchivedAsync(int id, ArchiveListingRequest request, int? userId, bool isAdmin, CancellationToken cancellationToken = default)
     {
@@ -222,6 +245,9 @@ public class ListingService
     {
         var address = _mapper.Map<ListingAddress>(request);
         address.ListingId = listingId;
+        // Null keeps the stored name; "" clears it (the repository turns it into NULL).
+        if (address.MarketingArea is { } area)
+            address.MarketingArea = area.Trim().Length <= 100 ? area.Trim() : area.Trim()[..100];
         var result = await _addressRepo.UpsertAsync(address, cancellationToken);
         return _mapper.Map<ListingAddressDto>(result);
     }
@@ -249,6 +275,9 @@ public class ListingService
     public async Task<ValuationDto> UpsertValuationAsync(int listingId, UpsertValuationRequest request, CancellationToken cancellationToken = default)
     {
         var valuation = _mapper.Map<ListingValuation>(request);
+        // Free text kept to the columns' sizes.
+        valuation.AdjustmentReason = Clip(valuation.AdjustmentReason, 500);
+        valuation.BondInstitution = Clip(valuation.BondInstitution, 100);
         var result = await _valuationRepo.UpsertAsync(listingId, valuation, cancellationToken);
         return _mapper.Map<ValuationDto>(result);
     }
@@ -296,7 +325,14 @@ public class ListingService
             _mapper.Map<List<OutdoorFeatureDto>>(outdoorFeaturesTask.Result),
             listing.HouseScore,
             listing.HouseScoreIsManual,
-            listing.ArchivedAt
+            listing.ArchivedAt,
+            listing.DetailsJson
         );
+    }
+
+    private static string? Clip(string? text, int max)
+    {
+        var t = text?.Trim();
+        return string.IsNullOrEmpty(t) ? null : t.Length <= max ? t : t[..max];
     }
 }

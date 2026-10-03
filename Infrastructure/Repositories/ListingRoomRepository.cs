@@ -17,7 +17,7 @@ public class ListingRoomRepository
     {
         using var connection = _connectionFactory.CreateConnection();
         var command = new CommandDefinition(
-            "SELECT Id, ListingId, Name, RoomTypeId, RoomTypeOther, PhotoUrl, CreatedAt, UpdatedAt FROM ListingRoom WHERE ListingId = @ListingId ORDER BY CreatedAt",
+            "SELECT Id, ListingId, Name, RoomTypeId, RoomTypeOther, PhotoUrl, UnitDetails, CreatedAt, UpdatedAt FROM ListingRoom WHERE ListingId = @ListingId ORDER BY CreatedAt",
             new { ListingId = listingId }, cancellationToken: cancellationToken);
         return await connection.QueryAsync<ListingRoom>(command);
     }
@@ -26,7 +26,7 @@ public class ListingRoomRepository
     {
         using var connection = _connectionFactory.CreateConnection();
         var command = new CommandDefinition(
-            "SELECT Id, ListingId, Name, RoomTypeId, RoomTypeOther, PhotoUrl, CreatedAt, UpdatedAt FROM ListingRoom WHERE Id = @Id",
+            "SELECT Id, ListingId, Name, RoomTypeId, RoomTypeOther, PhotoUrl, UnitDetails, CreatedAt, UpdatedAt FROM ListingRoom WHERE Id = @Id",
             new { Id = id }, cancellationToken: cancellationToken);
         return await connection.QueryFirstOrDefaultAsync<ListingRoom>(command);
     }
@@ -44,24 +44,24 @@ public class ListingRoomRepository
     {
         using var connection = _connectionFactory.CreateConnection();
         var command = new CommandDefinition(
-            "INSERT INTO ListingRoom (ListingId, Name, RoomTypeId, RoomTypeOther, PhotoUrl, CreatedAt, UpdatedAt) " +
-            "OUTPUT INSERTED.Id, INSERTED.ListingId, INSERTED.Name, INSERTED.RoomTypeId, INSERTED.RoomTypeOther, INSERTED.PhotoUrl, INSERTED.CreatedAt, INSERTED.UpdatedAt " +
-            "VALUES (@ListingId, @Name, @RoomTypeId, @RoomTypeOther, @PhotoUrl, GETUTCDATE(), GETUTCDATE())",
-            new { room.ListingId, room.Name, room.RoomTypeId, room.RoomTypeOther, room.PhotoUrl },
+            "INSERT INTO ListingRoom (ListingId, Name, RoomTypeId, RoomTypeOther, PhotoUrl, UnitDetails, CreatedAt, UpdatedAt) " +
+            "OUTPUT INSERTED.Id, INSERTED.ListingId, INSERTED.Name, INSERTED.RoomTypeId, INSERTED.RoomTypeOther, INSERTED.PhotoUrl, INSERTED.UnitDetails, INSERTED.CreatedAt, INSERTED.UpdatedAt " +
+            "VALUES (@ListingId, @Name, @RoomTypeId, @RoomTypeOther, @PhotoUrl, @UnitDetails, GETUTCDATE(), GETUTCDATE())",
+            new { room.ListingId, room.Name, room.RoomTypeId, room.RoomTypeOther, room.PhotoUrl, room.UnitDetails },
             cancellationToken: cancellationToken);
         return await connection.QueryFirstOrDefaultAsync<ListingRoom>(command);
     }
 
     /// <summary>Partial update: a null argument leaves that column unchanged.</summary>
-    public async Task<ListingRoom?> UpdateAsync(int id, string? name, int? roomTypeId, string? roomTypeOther, CancellationToken cancellationToken = default)
+    public async Task<ListingRoom?> UpdateAsync(int id, string? name, int? roomTypeId, string? roomTypeOther, string? unitDetails, CancellationToken cancellationToken = default)
     {
         using var connection = _connectionFactory.CreateConnection();
         var command = new CommandDefinition(
             "UPDATE ListingRoom SET Name = COALESCE(@Name, Name), RoomTypeId = COALESCE(@RoomTypeId, RoomTypeId), " +
-            "RoomTypeOther = COALESCE(@RoomTypeOther, RoomTypeOther), UpdatedAt = GETUTCDATE() " +
-            "OUTPUT INSERTED.Id, INSERTED.ListingId, INSERTED.Name, INSERTED.RoomTypeId, INSERTED.RoomTypeOther, INSERTED.PhotoUrl, INSERTED.CreatedAt, INSERTED.UpdatedAt " +
+            "RoomTypeOther = COALESCE(@RoomTypeOther, RoomTypeOther), UnitDetails = COALESCE(@UnitDetails, UnitDetails), UpdatedAt = GETUTCDATE() " +
+            "OUTPUT INSERTED.Id, INSERTED.ListingId, INSERTED.Name, INSERTED.RoomTypeId, INSERTED.RoomTypeOther, INSERTED.PhotoUrl, INSERTED.UnitDetails, INSERTED.CreatedAt, INSERTED.UpdatedAt " +
             "WHERE Id = @Id",
-            new { Id = id, Name = name, RoomTypeId = roomTypeId, RoomTypeOther = roomTypeOther },
+            new { Id = id, Name = name, RoomTypeId = roomTypeId, RoomTypeOther = roomTypeOther, UnitDetails = unitDetails },
             cancellationToken: cancellationToken);
         return await connection.QueryFirstOrDefaultAsync<ListingRoom>(command);
     }

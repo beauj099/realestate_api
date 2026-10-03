@@ -21,4 +21,11 @@ public class Listing
 
     /// <summary>When the agent archived the listing (UTC). Null while the listing is active.</summary>
     public DateTime? ArchivedAt { get; set; }
+
+    /// <summary>
+    /// The listing's further details as JSON, owned by the app: ownership type and subtype,
+    /// construction and views, overall condition, renovations, billing, letting, portal
+    /// references and the mandate information (the myEdge listing form). Null until set.
+    /// </summary>
+    public string? DetailsJson { get; set; }
 }

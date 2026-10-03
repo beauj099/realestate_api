@@ -52,12 +52,14 @@ public class ListingRoomService
         // PhotoUrl is only ever set by the upload endpoint. A client-supplied value could
         // point at another listing's object, which a later room delete would then remove.
         room.PhotoUrl = null;
+        room.UnitDetails = ValidUnitDetails(request.UnitDetails);
 
         var created = await _roomRepo.CreateAsync(room, cancellationToken);
         return new RoomDto(
             created.Id, created.ListingId, created.Name, created.RoomTypeId,
             created.RoomTypeOther, created.PhotoUrl, created.CreatedAt, created.UpdatedAt,
-            null, new List<FeatureDto>(), new List<CustomFeatureDto>(), new List<RoomPhotoDto>()
+            null, new List<FeatureDto>(), new List<CustomFeatureDto>(), new List<RoomPhotoDto>(),
+            created.UnitDetails
         );
     }
 
@@ -71,7 +73,8 @@ public class ListingRoomService
         // Omitted fields stay as they are. Mapping onto ListingRoom would turn a missing
         // RoomTypeId into 0 and a missing Name into "", overwriting the stored values.
         // PhotoUrl is ignored for the same reason as in CreateRoomAsync.
-        var updated = await _roomRepo.UpdateAsync(roomId, request.Name, request.RoomTypeId, request.RoomTypeOther, cancellationToken);
+        var updated = await _roomRepo.UpdateAsync(roomId, request.Name, request.RoomTypeId, request.RoomTypeOther,
+            ValidUnitDetails(request.UnitDetails), cancellationToken);
         if (updated == null) return null;
 
         var conditionTask = _roomRepo.GetConditionByRoomIdAsync(updated.Id, cancellationToken);
@@ -87,8 +90,28 @@ public class ListingRoomService
             conditionTask.Result is null ? null : _mapper.Map<RoomConditionDto>(conditionTask.Result),
             _mapper.Map<List<FeatureDto>>(featuresTask.Result),
             _mapper.Map<List<CustomFeatureDto>>(customFeaturesTask.Result),
-            photosTask.Result.Select(RoomDtoBuilder.ToPhotoDto).ToList()
+            photosTask.Result.Select(RoomDtoBuilder.ToPhotoDto).ToList(),
+            updated.UnitDetails
         );
+    }
+
+    /// <summary>A flatlet's layout as sent: a JSON object of at most 4 000 characters, else
+    /// rejected. Null stays null (an update then leaves the stored layout as it is).</summary>
+    private static string? ValidUnitDetails(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        if (json.Length > 4000) throw new ArgumentException("Unit details are too long.");
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object)
+                throw new ArgumentException("Unit details must be a JSON object.");
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            throw new ArgumentException("Unit details are not valid JSON.");
+        }
+        return json;
     }
 
     public async Task DeleteRoomAsync(int listingId, int roomId, int? userId, bool isAdmin, CancellationToken cancellationToken = default)

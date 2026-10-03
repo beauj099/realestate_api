@@ -271,6 +271,26 @@ public class PropertyReportService(
             .ToList();
     }
 
+    /// <summary>
+    /// The erf under a point and its outline (WGS84, closed), for the app's pin map: Cape Town and
+    /// Johannesburg from their own parcels, elsewhere from the national cadastre. Null when no
+    /// parcel is there or it has no boundary.
+    /// </summary>
+    public async Task<ParcelOutlineDto?> GetParcelAtAsync(double lat, double lng, CancellationToken ct)
+    {
+        var found = await ResolveAsync(new ResolvePropertyRequest(null, lat, lng, null, null), ct);
+        var parcel = found.FirstOrDefault();
+        if (parcel is null) return null;
+        var record = Cached(parcel.Municipality, parcel.Erf, parcel.Suburb)
+            ?? await GetRecordAsync(parcel.Municipality, parcel.Erf, parcel.Suburb, parcel.Sg26,
+                new RecordOptions(IncludeComparables: false, IncludeBuildings: false,
+                    IncludeApprovedWork: false, IncludeDwellingExtent: false),
+                "location", ct);
+        if (record.Boundary is not { Points.Count: >= 3 } ring) return null;
+        return new ParcelOutlineDto(parcel.Municipality, parcel.Erf,
+            ring.Points.Select(p => new LatLngDto(Math.Round(p.Lat, 7), Math.Round(p.Lng, 7))).ToList());
+    }
+
     /// <summary>The property's centre, for imagery. Null when the cadastre has no boundary.</summary>
     public async Task<LatLng?> GetLocationAsync(string municipality, string erf, string? suburb, string? sg26, CancellationToken ct)
     {
