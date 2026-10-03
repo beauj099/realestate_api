@@ -127,9 +127,9 @@ public class AreaDetailsService(IHttpClientFactory httpFactory, IMemoryCache cac
         var income = population?.MunicipalityCode is { } muni
             ? await Cached($"area:income:{muni}", () => IncomeAsync(muni, population.Dto.Municipality, ct))
             : null;
-        var shedding = population is null
-            ? null
-            : await loadShedding.ForAsync([population.Dto.SubPlace, population.Dto.MainPlace], population.Dto.Municipality, ct);
+        // By the point first (the area outlines), then by the sub place or main place name.
+        var shedding = await loadShedding.ForAsync(lat, lng,
+            [population?.Dto.SubPlace, population?.Dto.MainPlace], population?.Dto.Municipality, ct);
         return new AreaDetailsDto(climate.Result, population?.Dto, income, crime.Result)
         {
             Nearby = nearby.Result,

@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Loads the three load-shedding CSVs into dbo.LoadShedding*. See README.md in this folder. -->
+  <!-- Loads past load-shedding (the City of Cape Town's open data, or three CSVs) into dbo.LoadShedding*. See README.md in this folder. -->
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -8,6 +8,11 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The API's calculator, so the dry run prints the hours the report will show. -->
+    <Compile Include="..\..\Application\Services\LoadSheddingCalculator.cs" Link="LoadSheddingCalculator.cs" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Dapper" Version="2.1.79" />
